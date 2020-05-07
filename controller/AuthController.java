@@ -1,12 +1,15 @@
 package it.course.myblog.controller;
 
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 
 import java.util.Collections;
 import java.util.Optional;
 
-
+import javax.mail.MessagingException;
+import javax.mail.internet.AddressException;
 import javax.servlet.http.HttpServletRequest;
+import javax.transaction.Transactional;
 import javax.validation.Valid;
 import javax.validation.constraints.Size;
 
@@ -14,17 +17,21 @@ import javax.validation.constraints.Size;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.annotations.Api;
@@ -53,6 +60,8 @@ import it.course.myblog.repository.UserRepository;
 import it.course.myblog.security.JwtTokenProvider;
 import it.course.myblog.security.UserPrincipal;
 import it.course.myblog.service.CtrlUserBan;
+import it.course.myblog.service.MailService;
+import it.course.myblog.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 
 
@@ -94,6 +103,8 @@ public class AuthController {
 	@Autowired
 	CtrlUserBan ctrlUserBan;
 	
+	@Autowired
+	MailService mailService;
 	
 	@PostMapping("/signin")
 	@ApiOperation(value="User login", response = ResponseEntity.class)
@@ -115,6 +126,11 @@ public class AuthController {
 			return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 401, "Unauthorized", "Bad credentials", request.getRequestURI()), HttpStatus.FORBIDDEN);
 		}
 		
+		if(u.get().getRoles().size() < 1) {
+			log.error("User {} not confirmed", loginRequest.getUsernameOrEmail());
+			return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 401, "Unauthorized", "User not confirmed. Please check your email.", request.getRequestURI()), HttpStatus.FORBIDDEN);
+		}
+		
 		if(ctrlUserBan.isBanned(u.get()).isPresent()) {
 			log.info("User {} unauthorized to log in. Reason: banned!", loginRequest.getUsernameOrEmail());
 			return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 401, "Unauthorized", "User Banned Until "+ctrlUserBan.isBanned(u.get()).get().getBlacklistedUntil(), request.getRequestURI()), HttpStatus.FORBIDDEN);
@@ -133,14 +149,42 @@ public class AuthController {
 		
 	}
 	
+	
+	@PutMapping("/signup-confirm/{identifier}")
+	@ApiOperation(value="User registration", response = ResponseEntity.class)
+	@ApiResponses(value= {
+			@ApiResponse(code=200, message="User confirmed with default role READER")
+	})
+	public ResponseEntity<ApiResponseCustom> signupConfirm(
+			@ApiParam(value="identifier String", required=true) @PathVariable String identifier, HttpServletRequest request){
+		
+		log.info("Call controller signupConfirm with identifier: {}", identifier);
+		
+		Optional<Users> u = userRepository.findByIdentifierCode(identifier);
+		
+		if(!u.isPresent()) {
+			return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom(Instant.now(), 403, null, "User has just confirmed", request.getRequestURI()), HttpStatus.FORBIDDEN );
+		}
+
+		Role userRole = roleRepository.findByName(RoleName.ROLE_READER)
+				.orElseThrow( () -> new RuntimeException());
+		u.get().setRoles(Collections.singleton(userRole));
+		u.get().setIdentifierCode(null);
+
+		userRepository.save(u.get());
+		
+		return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom(Instant.now(), 200, null, "User confirmed", request.getRequestURI()), HttpStatus.OK );
+		
+	}
 
 	@PostMapping("/signup")
+	@Transactional
 	@ApiOperation(value="User registration", response = ResponseEntity.class)
 	@ApiResponses(value= {
 			@ApiResponse(code=200, message="User successfully registered with default role READER"),
 			@ApiResponse(code=403, message="Username or email already in use")
 	})
-	public ResponseEntity<ApiResponseCustom> registerUser(@ApiParam(value="SignUpRequest Object", required=true) @Valid @RequestBody SignUpRequest signUpRequest, HttpServletRequest request){
+	public ResponseEntity<ApiResponseCustom> registerUser(@ApiParam(value="SignUpRequest Object", required=true) @Valid @RequestBody SignUpRequest signUpRequest, HttpServletRequest request) {
 		
 		log.info("Call controller registerUser with SignUpRequest as parameter: {}, {}, {}, {}", signUpRequest.getEmail(), signUpRequest.getUsername(), signUpRequest.getName(), signUpRequest.getLastname());
 		
@@ -159,10 +203,23 @@ public class AuthController {
 		
 		user.setPassword(passwordEncoder.encode(user.getPassword()));
 		
-		Role userRole = roleRepository.findByName(RoleName.ROLE_READER)
-				.orElseThrow( () -> new RuntimeException());
+		try {
+			String identifier = UserService.toHexString(UserService.getSHA(Instant.now().toString()));
+			user.setIdentifierCode(identifier);
+			log.info("User has been update with identifier: {}", identifier);			
+			String[] TO_ADDRESS = new String[]{user.getEmail()};
+			try {
+				mailService.send(TO_ADDRESS, "forgot", identifier);
+			} catch (AddressException e) {
+				log.error(e.getMessage());
+			} catch (MessagingException e) {
+				log.error(e.getMessage());
+			}
+		} catch (NoSuchAlgorithmException e) {
+			log.error(e.getMessage());
+		}		
 		
-		user.setRoles(Collections.singleton(userRole));
+		log.info("Email has been sent to {}", user.getEmail());
 		
 		userRepository.save(user);
 		
@@ -171,34 +228,110 @@ public class AuthController {
 		
 	}
 	
-	@PutMapping("/change-password/{usernameOrEmail}/{newPassword}")
+	@Transactional
+	@PutMapping("/change-password/{identifier}/{newPassword}")
 	@ApiOperation(value="Change password", response = ResponseEntity.class)
 	@ApiResponses(value= {
 			@ApiResponse(code=200, message="Password has been modified"),
 			@ApiResponse(code=401, message="Bad credentials")			
 	})
 	public ResponseEntity<ApiResponseCustom> changePassword(
-			@ApiParam(value="usernameOrEmail String", required=true) @PathVariable @Size(min=3, max=120) String usernameOrEmail,
+			@ApiParam(value="identifier String", required=true) @PathVariable String identifier,
 			@ApiParam(value="newPassword String", required=true) @PathVariable @Size(min=5, max=8) String newPassword, HttpServletRequest request){
 		
-		log.info("Call controller changePassword with parameter usernameOrEmail {} and newPassword ******* ", usernameOrEmail);
+		log.info("Call controller changePassword with parameter identifier {} and newPassword ******* ", identifier);
 		
-		Optional<Users> u = userRepository.findByUsernameOrEmail(usernameOrEmail, usernameOrEmail);
+		Optional<Users> u = userRepository.findByIdentifierCode(identifier);
 		if(!u.isPresent()) {
-			log.error("User {} not found", usernameOrEmail);
-			return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 401, "Unauthorized", "Bad credentials", request.getRequestURI()), HttpStatus.FORBIDDEN);
+			log.error("User not found with identifier: {}", identifier);
+			return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 404, "null", "User not found with identifier: "+identifier, request.getRequestURI()), HttpStatus.NOT_FOUND);
 		}
 		
 		log.info("Encoding password");
 		u.get().setPassword(passwordEncoder.encode(newPassword));
+		u.get().setIdentifierCode(null);
 		
 		userRepository.save(u.get());
 		
-		log.info("Password has been modified by user {}", usernameOrEmail);
-		return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom(Instant.now(), 200, null, "Password has been modified by user "+usernameOrEmail, request.getRequestURI()), HttpStatus.OK );
+		log.info("Password has been modified by user {}", u.get().getUsername());
+		return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom(Instant.now(), 200, null, "Password has been modified by user "+u.get().getUsername(), request.getRequestURI()), HttpStatus.OK );
 		
 	}
 	
+	@PutMapping("/change-password-by-logged-user/{newPassword}")
+	@PreAuthorize("hasRole('READER') or hasRole('EDITOR') or hasRole('MANAGING_EDITOR') or hasRole('ADMIN')")
+	@ApiOperation(value = "Password modification : logged user", response = ResponseEntity.class)
+	@ApiResponses(value = {
+			@ApiResponse(code = 200, message = "Password has been modified")
+	})
+	public ResponseEntity<ApiResponseCustom> changePasswordByLoggedUser(
+			@ApiParam(value = "New password of the user", required = true)
+			@PathVariable
+			@Size(min = 5, max = 20)
+				String newPassword,
+			HttpServletRequest request){
+		
+		UserPrincipal userPrincipal = UserService.getAuthenticatedUser();
+		
+		Users user = userRepository.findById(userPrincipal.getId()).get();
+		
+		log.info("Call controller changePasswordByLoggedUser with logged user {}", user.getUsername());
+		
+		log.info("Encoding password");
+		user.setPassword(passwordEncoder.encode(newPassword));
+		
+		userRepository.save(user);
+		
+		log.info("User {} password changed succesfully", user.getUsername());
+		
+		return new ResponseEntity<ApiResponseCustom>(
+				new ApiResponseCustom(Instant.now(), 200, null,	"Password has been modified succesfully!", request.getRequestURI()),
+				HttpStatus.OK);
+	}
+	
+	@PutMapping("/forgot-password/{usernameOrEmail}")
+	@Transactional
+	@ApiOperation(value="Change password", response = ResponseEntity.class)
+	@ApiResponses(value= {
+			@ApiResponse(code=200, message="Email has been sent"),
+			@ApiResponse(code=404, message="User not found")			
+	})
+	public ResponseEntity<ApiResponseCustom> forgotPassword(
+			@ApiParam(value="usernameOrEmail String", required=true) @PathVariable @Size(min=3, max=120) String usernameOrEmail, HttpServletRequest request){
+		
+		log.info("Call controller forgotPassword with parameter usernameOrEmail: {}", usernameOrEmail);
+		
+		Optional<Users> u = userRepository.findByUsernameOrEmail(usernameOrEmail, usernameOrEmail);
+		if(!u.isPresent()) {
+			log.error("User {} not found", usernameOrEmail);
+			return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 404, null, "User not found", request.getRequestURI()), HttpStatus.NOT_FOUND);
+		}
+		
+		try {
+			String identifier = UserService.toHexString(UserService.getSHA(Instant.now().toString()));
+			u.get().setIdentifierCode(identifier);
+			userRepository.save(u.get());
+			log.info("User has been update with identifier: {}", identifier);			
+			String[] TO_ADDRESS = new String[]{u.get().getEmail()};
+			try {
+				mailService.send(TO_ADDRESS, "forgot", identifier);
+			} catch (AddressException e) {
+				log.error(e.getMessage());
+			} catch (MessagingException e) {
+				log.error(e.getMessage());
+			}
+		} catch (NoSuchAlgorithmException e) {
+			// TODO Auto-generated catch block
+			log.error(e.getMessage());
+		}		
+		
+		log.info("Email has been sent to {}", usernameOrEmail);
+		//  http://localhost:8081/api/auth/change-password/406EF88212FBCD982DF8D3F9AF3A05AF609348C0ABF1BB77CE227127BDED3D55
+		
+	//  http://192.168.10.189:8081/api/auth/change-password/406EF88212FBCD982DF8D3F9AF3A05AF609348C0ABF1BB77CE227127BDED3D55
+		return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom(Instant.now(), 200, null, "Email has been sent to: "+usernameOrEmail, request.getRequestURI()), HttpStatus.OK );
+		
+	}
 	
 	@PostMapping("/add-user-to-blacklist")
 	@PreAuthorize("hasRole('READER')")

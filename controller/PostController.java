@@ -103,6 +103,7 @@ public class PostController {
 	
 	@Autowired
 	CreditRepository creditRepository;
+	
 
 	@GetMapping("/view-two-posts-by-max-avg")
 	@PreAuthorize("hasRole('ADMIN') or hasRole('MANAGING_EDITOR')")

@@ -9,16 +9,17 @@ import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 
 import org.hibernate.annotations.NaturalId;
-import org.hibernate.annotations.OnDelete;
 
 import it.course.myblog.entity.audit.DateAudit;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "users", uniqueConstraints={@UniqueConstraint(columnNames={"username"})})
 @Data @AllArgsConstructor @NoArgsConstructor
+@EqualsAndHashCode(callSuper=false)
 public class Users extends DateAudit {
 	
 	private static final long serialVersionUID = 1L;
@@ -60,6 +61,9 @@ public class Users extends DateAudit {
 	inverseJoinColumns = @JoinColumn(name="post_id"))
 	private Set<Post> posts = new HashSet<>();
 	
+	@Size(max = 64)
+	private String identifierCode;
+	
 	public Users(String username, String email, String password, String name, String lastname, boolean hasNewsletter) {
 		super();
 		this.username = username;
@@ -68,6 +72,28 @@ public class Users extends DateAudit {
 		this.name = name;
 		this.lastname = lastname;
 		this.hasNewsletter = hasNewsletter;
+	}
+	
+	public Users(Long id, String username, String email, String identifierCode) {
+		super();
+		this.id = id;
+		this.username = username;
+		this.email = email;
+		this.identifierCode = identifierCode;
+	}
+
+	public Users(Long id, String username, String email,
+			String password, String name, String lastname,
+			boolean hasNewsletter, Set<Role> roles) {
+		super();
+		this.id = id;
+		this.username = username;
+		this.email = email;
+		this.password = password;
+		this.name = name;
+		this.lastname = lastname;
+		this.hasNewsletter = hasNewsletter;
+		this.roles = roles;
 	}
 			
 	
