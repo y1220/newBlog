@@ -18,4 +18,6 @@ public interface PostViewedRepository extends JpaRepository<PostViewed, Long>{
 	
 	List<PostViewed> findByViewedStartBetweenAndPost(Instant viewedStart, Instant viewedEnd, Post id);
 
+	List<PostViewed> findByPost(Post post);
+
 }
