@@ -5,11 +5,12 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.apache.poi.hssf.usermodel.HSSFSheet;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.Row;
@@ -36,10 +37,12 @@ import com.itextpdf.text.pdf.PdfStamper;
 import com.itextpdf.text.pdf.PdfWriter;
 
 import it.course.myblog.entity.Blacklist;
+import it.course.myblog.entity.Comment;
 import it.course.myblog.entity.Post;
 import it.course.myblog.entity.PostViewed;
 import it.course.myblog.entity.Users;
 import it.course.myblog.repository.BlacklistRepository;
+import it.course.myblog.repository.CommentRepository;
 import it.course.myblog.repository.PostRepository;
 import it.course.myblog.repository.PostViewedRepository;
 import it.course.myblog.repository.UserRepository;
@@ -59,6 +62,9 @@ public class FileService {
 
 	@Autowired
 	BlacklistRepository blacklistRepository;
+
+	@Autowired
+	CommentRepository commentRepository;
 
 	private static Font FONT_TITLE = new Font(Font.FontFamily.TIMES_ROMAN, 16, Font.BOLD, BaseColor.BLUE);
 	private static Font FONT_CONTENT = new Font(Font.FontFamily.TIMES_ROMAN, 12, Font.NORMAL);
@@ -184,30 +190,54 @@ public class FileService {
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 		HSSFWorkbook wb1 = new HSSFWorkbook();
 
-		List<Post> pList = postRepository.findAllByIsVisibleTrue();
+		/* prepare the lists */
+		List<Post> pList = postRepository.findAll();
+
+		List<Long> ids = pList.stream().map(x -> x.getCreatedBy()).collect(Collectors.toList());
+		Set<Users> aList = new HashSet<Users>();
+		for (Long id : ids) {
+			Optional<Users> u = userRepository.findById(id);
+			aList.add(u.get());
+		}
+
+		List<Comment> cList = commentRepository.findAll();
+		List<Long> ids2 = cList.stream().map(x -> x.getCreatedBy()).collect(Collectors.toList());
+		Set<Users> rList = new HashSet<Users>();
+		for (Long id : ids2) {
+			Optional<Users> u = userRepository.findById(id);
+			rList.add(u.get());
+		}
+
+		/* creation of the sheets */
+		out = createSheets(wb1, pList, aList, rList, out);
 
 
-		/* post */
-		out = createPostSheet(wb1, "post", pList, out, 0);
-		/* author */
-		out = createPostSheet(wb1, "author", pList, out, 1);
-		/* reader */
-		out = createPostSheet(wb1, "reader", pList, out, 2);
+		/* write values into output stream */
+		try {
+			wb1.write(out);
+		} catch (IOException e) {
+			System.out.println(e.toString());
+		} finally {
+			try {
+				out.close();
+			} catch (IOException e) {
+				System.out.println(e.toString());
+			}
+		}
+		wb1.close();
 
-
-
+		/* pass output stream as input stram */
 		return new ByteArrayInputStream(out.toByteArray());
-
 	}
 
-	public ByteArrayOutputStream createPostSheet(HSSFWorkbook wb1, String sheetName, List<Post> listname,
-			ByteArrayOutputStream out, int num)
+	public ByteArrayOutputStream createSheets(HSSFWorkbook wb1, List<Post> pList, Set<Users> aList, Set<Users> rList,
+			ByteArrayOutputStream out)
 			throws IOException {
-		// TODO Auto-generated method stub
-		// HSSFSheet sheet = wb1.createSheet(sheetName);
-		Sheet sheet = wb1.createSheet(sheetName);
 
-		// sheet = wb1.getSheetAt(num);
+		// <------------------------------------------------------------POST------------------------------------------------------------------------------------------------->
+		Sheet sheet = wb1.createSheet("Post");
+		sheet = wb1.getSheetAt(0);
+
 		Row row = sheet.createRow(0);
 		Cell cell = row.createCell(0);
 		cell.setCellValue((String) "Post");
@@ -228,7 +258,7 @@ public class FileService {
 
 		int rowCount = 0;
 
-		for (Post p : listname) {
+		for (Post p : pList) {
 
 			row = sheet.createRow(++rowCount);
 
@@ -252,9 +282,10 @@ public class FileService {
 			cell.setCellValue((int) filteredByIp.size());
 
 			cell = row.createCell(5);
-			List<Blacklist> bl = blacklistRepository.findByUser(userRepository.findById(p.getCreatedBy()).get());
+			List<Blacklist> bl = blacklistRepository
+					.findByUserAndIsVerifiedTrue(userRepository.findById(p.getCreatedBy()).get());
 			String banned = "";
-			banned = (bl.isEmpty()) ? "N" : "Y";
+			banned = ((bl.isEmpty()) && (p.isVisible())) ? "N" : "Y";
 			cell.setCellValue((String) banned);
 
 			cell = row.createCell(6);
@@ -270,12 +301,10 @@ public class FileService {
 				List<Users> ulist = userRepository.findAll();
 				for (Users u : ulist) {
 					if (u.getRoles().size() < 2) {
-						List<Long> id = u.getRoles().stream().map(x -> x.getId()).collect(Collectors.toList());// only
-																												// //
-																												// one
+						// CONTAINS ONLY ONE ROLE
+						List<Long> id = u.getRoles().stream().map(x -> x.getId()).collect(Collectors.toList());
 						if (id.get(0) == (long) 4) {
 							Set<Post> postBoughtList = u.getPosts();
-							// CONTROL IF LOGGED USER BOUGHT THE POST
 							if (postBoughtList.stream().filter(post -> (post.getId() == p.getId())).count() == 1)
 								cnt++;
 						}
@@ -285,9 +314,11 @@ public class FileService {
 			}
 			cell.setCellValue((int) cnt);
 		}
-		HSSFSheet sheet2 = wb1.createSheet(sheetName);
 
-		sheet2 = wb1.getSheetAt(0);
+		// <------------------------------------------------------------AUTHOR------------------------------------------------------------------------------------------------->
+		Sheet sheet2 = wb1.createSheet("Author");
+		sheet2 = wb1.getSheetAt(1);
+
 		row = sheet2.createRow(0);
 		cell = row.createCell(0);
 		cell.setCellValue((String) "Author");
@@ -300,124 +331,55 @@ public class FileService {
 		cell = row.createCell(4);
 		cell.setCellValue((String) "Banned Post");
 
-		try {
-			wb1.write(out);
-		} catch (IOException e) {
-			System.out.println(e.toString());
-		} finally {
-			try {
-				out.close();
-			} catch (IOException e) {
-				System.out.println(e.toString());
-			}
-		}
-		wb1.close();
-
-		return out;
-	}
-
-	public ByteArrayOutputStream createAuthorSheet(HSSFWorkbook wb1, String sheetName, List<Post> listname,
-			ByteArrayOutputStream out, int num) throws IOException {
-		// TODO Auto-generated method stub
-		HSSFSheet sheet2 = wb1.createSheet(sheetName);
-
-		sheet2 = wb1.getSheetAt(0);
-		Row row = sheet2.createRow(0);
-		Cell cell = row.createCell(0);
-		cell.setCellValue((String) "Author");
-		cell = row.createCell(1);
-		cell.setCellValue((String) "Total Posts");
-		cell = row.createCell(2);
-		cell.setCellValue((String) "Published Post");
-		cell = row.createCell(3);
-		cell.setCellValue((String) "Post to Check(isVisible=false)");
-		cell = row.createCell(4);
-		cell.setCellValue((String) "Banned Post");
-
-		int rowCount = 0;
-
-		for (Post p : listname) {
+		// FETCH THE VALUES DEPENDS ON EACH AUTHOR
+		rowCount = 0;
+		// int numTP, numPP, numPC, numBP = 0;
+		int Psum[] = { 0, 0, 0, 0 };
+		for (Users u : aList) {
 
 			row = sheet2.createRow(++rowCount);
 
 			cell = row.createCell(0);
-			cell.setCellValue((Long) p.getId());
+			cell.setCellValue((String) u.getUsername());
+
 
 			cell = row.createCell(1);
-			cell.setCellValue((String) p.getTitle());
+			List<Post> posts = postRepository.findByCreatedBy(u.getId());
+			cell.setCellValue((int) posts.size());
+			Psum[0] = Psum[0] + posts.size();
 
 			cell = row.createCell(2);
-			String YorN = "";
-			YorN = (p.getCredit().getId() == (long) 5) ? "Y" : "N";
-			cell.setCellValue((String) YorN);
+			List<Post> vposts = postRepository.findByIsVisibleTrueAndCreatedBy(u.getId());
+			cell.setCellValue((int) vposts.size());
+			Psum[1] = Psum[1] + vposts.size();
 
 			cell = row.createCell(3);
-			List<PostViewed> pv = postViewdRepository.findByPost(p);
-			cell.setCellValue((Integer) pv.size());
+			cell.setCellValue((int) posts.size() - (int) vposts.size());
+			Psum[2] = Psum[2] + posts.size() - vposts.size();
 
 			cell = row.createCell(4);
-			List<PostViewed> filteredByIp = StreamEx.of(pv).distinct(PostViewed::getIp).toList();
-			cell.setCellValue((int) filteredByIp.size());
+			List<Blacklist> blist = blacklistRepository.findByUserAndIsVerifiedTrue(u);
+			blist.stream().filter(x -> x.getPost().getId() != 0);
+			cell.setCellValue((int) blist.size());
+			Psum[3] = Psum[3] + blist.size();
 
-			cell = row.createCell(5);
-			List<Blacklist> bl = blacklistRepository.findByUser(userRepository.findById(p.getCreatedBy()).get());
-			String banned = "";
-			banned = (bl.isEmpty()) ? "N" : "Y";
-			cell.setCellValue((String) banned);
-
-			cell = row.createCell(6);
-			if (p.getAvgRating() != null)
-				cell.setCellValue((Double) p.getAvgRating());
-			else
-				cell.setCellValue((Double) 0.0);
-
-			cell = row.createCell(7);
-			// EXCEPT ROLE_READER, THE OTHER ROLES CAN VIEW THE POST
-			int cnt = 0;
-			if (p.getCredit().getId() != (long) 5) {
-				List<Users> ulist = userRepository.findAll();
-				for (Users u : ulist) {
-					if (u.getRoles().size() < 2) {
-						List<Long> id = u.getRoles().stream().map(x -> x.getId()).collect(Collectors.toList());// only
-																												// //
-																												// one
-						if (id.get(0) == (long) 4) {
-							Set<Post> postBoughtList = u.getPosts();
-							// CONTROL IF LOGGED USER BOUGHT THE POST
-							if (postBoughtList.stream().filter(post -> (post.getId() == p.getId())).count() == 1)
-								cnt++;
-						}
-
-					}
-				}
-			}
-			cell.setCellValue((int) cnt);
 		}
 
-		try {
-			wb1.write(out);
-		} catch (IOException e) {
-			System.out.println(e.toString());
-		} finally {
-			try {
-				out.close();
-			} catch (IOException e) {
-				System.out.println(e.toString());
-			}
+		row = sheet2.createRow(++rowCount);
+		cell = row.createCell(0);
+		cell.setCellValue((String) "Total");
+
+		for (int i = 1; i < 5; i++) {
+			cell = row.createCell(i);
+			cell.setCellValue((int) Psum[i - 1]);
 		}
-		wb1.close();
 
-		return out;
-	}
+		// <------------------------------------------------------------READER------------------------------------------------------------------------------------------------->
+		Sheet sheet3 = wb1.createSheet("Reader");
+		sheet3 = wb1.getSheetAt(2);
 
-	public ByteArrayOutputStream createReaderSheet(HSSFWorkbook wb1, String sheetName, List<Post> listname,
-			ByteArrayOutputStream out, int num) throws IOException {
-		// TODO Auto-generated method stub
-		HSSFSheet sheet3 = wb1.createSheet(sheetName);
-
-		sheet3 = wb1.getSheetAt(0);
-		Row row = sheet3.createRow(0);
-		Cell cell = row.createCell(0);
+		row = sheet3.createRow(0);
+		cell = row.createCell(0);
 		cell.setCellValue((String) "Reader");
 		cell = row.createCell(1);
 		cell.setCellValue((String) "Total Comment");
@@ -432,80 +394,81 @@ public class FileService {
 		cell = row.createCell(6);
 		cell.setCellValue((String) "Credit");
 
-		int rowCount = 0;
-
-		for (Post p : listname) {
+		// FETCH THE VALUES DEPENDS ON EACH READER
+		rowCount = 0;
+		// int numTCom=0, numPCom=0, numComC=0, numBC=0, numBouP =0;
+		int Csum[] = { 0, 0, 0, 0, 0 };
+		for (Users u : rList) {
 
 			row = sheet3.createRow(++rowCount);
 
 			cell = row.createCell(0);
-			cell.setCellValue((Long) p.getId());
+			cell.setCellValue((Long) u.getId());
 
 			cell = row.createCell(1);
-			cell.setCellValue((String) p.getTitle());
+			List<Comment> comments = commentRepository.findByCreatedBy(u.getId());
+			cell.setCellValue((int) comments.size());
+			// numTCom = numTCom + comments.size();
+			Csum[0] = Csum[0] + comments.size();
 
 			cell = row.createCell(2);
-			String YorN = "";
-			YorN = (p.getCredit().getId() == (long) 5) ? "Y" : "N";
-			cell.setCellValue((String) YorN);
-
+			List<Comment> vcomments = commentRepository.findByIsVisibleTrueAndCreatedBy(u.getId());
+			cell.setCellValue((int) vcomments.size());
+			// numPCom = numPCom + vcomments.size();
+			Csum[1] = Csum[1] + vcomments.size();
+			
 			cell = row.createCell(3);
-			List<PostViewed> pv = postViewdRepository.findByPost(p);
-			cell.setCellValue((Integer) pv.size());
-
+			cell.setCellValue((int) comments.size() - vcomments.size());
+			// numComC = numComC + comments.size() - vcomments.size();
+			Csum[2] = Csum[2] + comments.size() - comments.size();
+			
 			cell = row.createCell(4);
-			List<PostViewed> filteredByIp = StreamEx.of(pv).distinct(PostViewed::getIp).toList();
-			cell.setCellValue((int) filteredByIp.size());
-
+			List<Blacklist> blist = blacklistRepository.findByUserAndIsVerifiedTrue(u);
+			blist.stream().filter(x -> x.getPost().getId() == 0);
+			cell.setCellValue((int) blist.size());
+			// numBC = numBC + blist.size();
+			Csum[3] = Csum[3] + blist.size();
+			
 			cell = row.createCell(5);
-			List<Blacklist> bl = blacklistRepository.findByUser(userRepository.findById(p.getCreatedBy()).get());
-			String banned = "";
-			banned = (bl.isEmpty()) ? "N" : "Y";
-			cell.setCellValue((String) banned);
+			Set<Post> posts = u.getPosts();
+			cell.setCellValue((int) posts.size());
+			// numBouP = numBouP + posts.size();
+			Csum[4] = Csum[4] + posts.size();
 
 			cell = row.createCell(6);
-			if (p.getAvgRating() != null)
-				cell.setCellValue((Double) p.getAvgRating());
-			else
-				cell.setCellValue((Double) 0.0);
+			cell.setCellValue((int) u.getCredit());
 
-			cell = row.createCell(7);
-			// EXCEPT ROLE_READER, THE OTHER ROLES CAN VIEW THE POST
-			int cnt = 0;
-			if (p.getCredit().getId() != (long) 5) {
-				List<Users> ulist = userRepository.findAll();
-				for (Users u : ulist) {
-					if (u.getRoles().size() < 2) {
-						List<Long> id = u.getRoles().stream().map(x -> x.getId()).collect(Collectors.toList());// only
-																												// //
-																												// one
-						if (id.get(0) == (long) 4) {
-							Set<Post> postBoughtList = u.getPosts();
-							// CONTROL IF LOGGED USER BOUGHT THE POST
-							if (postBoughtList.stream().filter(post -> (post.getId() == p.getId())).count() == 1)
-								cnt++;
-						}
-
-					}
-				}
-			}
-			cell.setCellValue((int) cnt);
 		}
 
-		try {
-			wb1.write(out);
-		} catch (IOException e) {
-			System.out.println(e.toString());
-		} finally {
-			try {
-				out.close();
-			} catch (IOException e) {
-				System.out.println(e.toString());
-			}
+		row = sheet3.createRow(++rowCount);
+		cell = row.createCell(0);
+		cell.setCellValue((String) "Total");
+		for (int i = 1; i < 6; i++) {
+			cell = row.createCell(i);
+			cell.setCellValue((int) Csum[i - 1]);
 		}
-		wb1.close();
 
 		return out;
 	}
+
+	/*
+	 * impossible to do because of row and cell I must use same one here but
+	 * difficult to pass it public ByteArrayOutputStream
+	 * createAuthorSheet(HSSFWorkbook wb1, List<Post> listname,
+	 * ByteArrayOutputStream out, int num) throws IOException { // TODO
+	 * Auto-generated method stub Sheet sheet2 = wb1.createSheet("Author");
+	 * 
+	 * sheet2 = wb1.getSheetAt(num); Row row = sheet2.createRow(0); Cell cell =
+	 * row.createCell(0); cell.setCellValue((String) "Author"); cell =
+	 * row.createCell(1); cell.setCellValue((String) "Total Posts"); cell =
+	 * row.createCell(2); cell.setCellValue((String) "Published Post"); cell =
+	 * row.createCell(3); cell.setCellValue((String)
+	 * "Post to Check(isVisible=false)"); cell = row.createCell(4);
+	 * cell.setCellValue((String) "Banned Post");
+	 * 
+	 * //for operation to fetch values depends on each author
+	 * 
+	 * return out; }
+	 */
 
 }

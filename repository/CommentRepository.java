@@ -10,8 +10,10 @@ public interface CommentRepository extends JpaRepository<Comment, Long>{
 	
 	List<Comment> findByIdIn(List<Long> ids);
 	
-	
+	List<Comment> findAll();
 	
 	List<Comment> findByIsVisibleTrueAndCreatedBy(Long id);
+
+	List<Comment> findByCreatedBy(Long id);
 
 }
