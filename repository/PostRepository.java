@@ -37,6 +37,8 @@ public interface PostRepository extends JpaRepository<Post, Long>{
 	Page<Post> findAllByIsVisibleTrue(Pageable pageable);
 	
 	Page<Post> findByIdIn(Set<Long> ids, Pageable pageable);
+
+	List<Post> findByIsApprovedFalseAndCreatedBy(Long id);
 	
 	
 	

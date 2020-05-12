@@ -25,6 +25,12 @@ public interface BlacklistRepository extends JpaRepository<Blacklist, Long>{
 	List<Blacklist> findByIsVerifiedFalse();
 	
 	List<Blacklist> findByBlacklistedUntilBeforeOrBlacklistedUntilIsNotNull(LocalDate localdate);
+
+	List<Blacklist> findByCommentIdInAndBlacklistedUntilAfter(List<Long> ids, LocalDate now);
+
+	List<Blacklist> findByCommentIdIn(List<Long> ids);
+
+	List<Blacklist> findByPostIdInAndCommentId(List<Long> ids, Long zero);
 	
 	/** @Query -> nativeQuery **/
 	//@Query(value = "SELECT b.id, b.blacklisted_from, MAX(b.blacklisted_until) AS blacklisted_until, b.user_id, b.post_id, b.comment_id, b.blacklist_reason_id, b.reported_by, b.is_verified  "
@@ -42,4 +48,7 @@ public interface BlacklistRepository extends JpaRepository<Blacklist, Long>{
 	List<Blacklist> findByUserAndBlacklistedUntilIsNotNull(Users user);
 	
 	boolean existsByPostAndReporterAndCommentIdAndBlacklistReason(Post post, Users reporter, Long commentId, BlacklistReason blacklistReason);
+
+	List<Blacklist> findAllByUserId(Long userId);
+
 }

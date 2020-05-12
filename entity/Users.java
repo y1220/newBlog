@@ -3,23 +3,39 @@ package it.course.myblog.entity;
 import java.util.HashSet;
 import java.util.Set;
 
-import javax.persistence.*;
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.FetchType;
+import javax.persistence.GeneratedValue;
+import javax.persistence.GenerationType;
+import javax.persistence.Id;
+import javax.persistence.JoinColumn;
+import javax.persistence.JoinTable;
+import javax.persistence.ManyToMany;
+import javax.persistence.Table;
+import javax.persistence.UniqueConstraint;
 import javax.validation.constraints.Email;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 
 import org.hibernate.annotations.NaturalId;
 
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+
 import it.course.myblog.entity.audit.DateAudit;
 import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "users", uniqueConstraints={@UniqueConstraint(columnNames={"username"})})
-@Data @AllArgsConstructor @NoArgsConstructor
-@EqualsAndHashCode(callSuper=false)
+//@Data 
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+//@EqualsAndHashCode(callSuper=false)
 public class Users extends DateAudit {
 	
 	private static final long serialVersionUID = 1L;
@@ -56,6 +72,7 @@ public class Users extends DateAudit {
 	inverseJoinColumns = @JoinColumn(name = "role_id"))
 	private Set<Role> roles = new HashSet<>();	
 	
+	@JsonManagedReference
 	@ManyToMany(fetch = FetchType.EAGER)
 	@JoinTable(name="user_post_buyed", joinColumns = @JoinColumn(name="user_id"),
 	inverseJoinColumns = @JoinColumn(name="post_id"))

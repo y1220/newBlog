@@ -24,52 +24,56 @@ import org.hibernate.annotations.LazyCollectionOption;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 
 import it.course.myblog.entity.audit.UserAudit;
 import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 
 @Entity
 @Table(name = "post")
-@Data @AllArgsConstructor @NoArgsConstructor
-@EqualsAndHashCode(callSuper=false)
+/* @Data */ @Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+//@EqualsAndHashCode(callSuper=false)
 public class Post extends UserAudit{
-	
+
 	private static final long serialVersionUID = 1L;
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
-	
-	@Column(name = "title", nullable=false, columnDefinition = "VARCHAR(100)")
+
+	@Column(name = "title", nullable = false, columnDefinition = "VARCHAR(100)")
 	private String title;
 	
-	@Column(name = "content", nullable=false, columnDefinition = "TEXT")
+	@Column(name = "content", nullable = false, columnDefinition = "TEXT")
 	private String content;
 	
-	@Column(name = "is_visible", nullable=false, columnDefinition = "TINYINT(1) DEFAULT 0")
+	@Column(name = "is_visible", nullable = false, columnDefinition = "TINYINT(1) DEFAULT 0")
 	private boolean isVisible;
 	
-	@Column(name = "is_approved", nullable=false, columnDefinition = "TINYINT(1) DEFAULT 0")
+	@Column(name = "is_approved", nullable = false, columnDefinition = "TINYINT(1) DEFAULT 0")
 	private boolean isApproved;
 	
-	@JsonManagedReference // Resolve infinite Recursion with Jackson JSON and Hibernate JPA in bidirectional association
-	@OneToMany(mappedBy="post", fetch= FetchType.EAGER, cascade = CascadeType.MERGE, orphanRemoval=true)
+	@JsonManagedReference // Resolve infinite Recursion with Jackson JSON and Hibernate JPA in
+							// bidirectional association
+	@OneToMany(mappedBy = "post", fetch = FetchType.EAGER, cascade = CascadeType.MERGE, orphanRemoval = true)
 	private List<Comment> comments = new ArrayList<Comment>();
 	
 	@ManyToMany(fetch = FetchType.EAGER)
-	@JoinTable(name="post_tags", joinColumns = @JoinColumn(name="post_id"),
-	inverseJoinColumns = @JoinColumn(name="tag_id"))
+	@JoinTable(name = "post_tags", joinColumns = @JoinColumn(name = "post_id"), inverseJoinColumns = @JoinColumn(name = "tag_id"))
 	@OnDelete(action=OnDeleteAction.CASCADE) 
 	private Set<Tag> tags = new HashSet<>();
-	
+
 	@JsonManagedReference
 	@LazyCollection(LazyCollectionOption.FALSE)
-	@OneToMany(mappedBy="post", cascade=CascadeType.MERGE, orphanRemoval=true)
+	@OneToMany(mappedBy = "post", cascade = CascadeType.MERGE, orphanRemoval = true)
 	private List<Blacklist> blacklists;
 	
 	@JsonManagedReference
@@ -77,7 +81,11 @@ public class Post extends UserAudit{
 	@JoinColumn(name="credit_id")
 	private Credit credit;
 	
-	@Column(name = "avg_rating", columnDefinition="DECIMAL(3,2)")
+	@JsonBackReference
+	@ManyToMany(fetch = FetchType.EAGER, mappedBy = "posts")
+	private Set<Users> usersWhoBought = new HashSet<>();
+
+	@Column(name = "avg_rating", columnDefinition = "DECIMAL(3,2)")
 	private Double avgRating;
 
 	public Post(Long id, String title, String content, boolean isVisible, boolean isApproved) {
@@ -88,6 +96,5 @@ public class Post extends UserAudit{
 		this.isVisible = isVisible;
 		this.isApproved = isApproved;
 	}
-	
-	
+
 }

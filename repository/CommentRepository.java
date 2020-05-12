@@ -16,4 +16,8 @@ public interface CommentRepository extends JpaRepository<Comment, Long>{
 
 	List<Comment> findByCreatedBy(Long id);
 
+	long countByCreatedBy(Long id);
+
+	List<Comment> findByIsVisibleFalseAndCreatedBy(Long id);
+
 }

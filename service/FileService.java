@@ -1,26 +1,36 @@
 package it.course.myblog.service;
 
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.util.HashSet;
+import java.net.URISyntaxException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.text.DecimalFormat;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.apache.poi.hssf.usermodel.HSSFFont;
+import org.apache.poi.hssf.usermodel.HSSFSheet;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.hssf.util.HSSFColor.HSSFColorPredefined;
+import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
 import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.itextpdf.text.BadElementException;
 import com.itextpdf.text.BaseColor;
 import com.itextpdf.text.Document;
-import com.itextpdf.text.DocumentException;
 import com.itextpdf.text.Element;
 import com.itextpdf.text.Font;
 import com.itextpdf.text.Image;
@@ -40,13 +50,20 @@ import it.course.myblog.entity.Blacklist;
 import it.course.myblog.entity.Comment;
 import it.course.myblog.entity.Post;
 import it.course.myblog.entity.PostViewed;
+import it.course.myblog.entity.Role;
+import it.course.myblog.entity.RoleName;
 import it.course.myblog.entity.Users;
+import it.course.myblog.payload.response.AuthorExcel;
+import it.course.myblog.payload.response.PostExcel;
+import it.course.myblog.payload.response.ReaderExcel;
 import it.course.myblog.repository.BlacklistRepository;
 import it.course.myblog.repository.CommentRepository;
 import it.course.myblog.repository.PostRepository;
 import it.course.myblog.repository.PostViewedRepository;
+import it.course.myblog.repository.RoleRepository;
 import it.course.myblog.repository.UserRepository;
 import one.util.streamex.StreamEx;
+
 
 @Service
 public class FileService {
@@ -55,23 +72,33 @@ public class FileService {
 	PostRepository postRepository;
 
 	@Autowired
+	PostViewedRepository postViewdRepository;
+
+	@Autowired
 	UserRepository userRepository;
 
 	@Autowired
-	PostViewedRepository postViewdRepository;
+	RoleRepository roleRepository;
+
+	@Autowired
+	CommentRepository commentRepository;
 
 	@Autowired
 	BlacklistRepository blacklistRepository;
 
 	@Autowired
-	CommentRepository commentRepository;
+	PostViewedRepository postViewedRepository;
 
-	private static Font FONT_TITLE = new Font(Font.FontFamily.TIMES_ROMAN, 16, Font.BOLD, BaseColor.BLUE);
+	// attributi PDF
+	private static Font FONT_TITLE = new Font(Font.FontFamily.TIMES_ROMAN, 16, Font.BOLD);
 	private static Font FONT_CONTENT = new Font(Font.FontFamily.TIMES_ROMAN, 12, Font.NORMAL);
 	private static Font FONT_AUTHOR = new Font(Font.FontFamily.TIMES_ROMAN, 12, Font.ITALIC);
 	private static Font FONT_DATE = new Font(Font.FontFamily.TIMES_ROMAN, 10, Font.ITALIC, BaseColor.LIGHT_GRAY);
 	private static Font FONT_PAGE_NUMBER = new Font(Font.FontFamily.TIMES_ROMAN, 9, Font.ITALIC, BaseColor.LIGHT_GRAY);
 
+	private static Font smallBold = new Font(Font.FontFamily.TIMES_ROMAN, 12, Font.BOLD);
+
+	// inizio metodo generazione PDF
 	public InputStream createPdfFromPost(Post p) throws Exception {
 
 		String createdBy = userRepository.findById(p.getCreatedBy()).get().getUsername();
@@ -79,7 +106,6 @@ public class FileService {
 		String content = p.getContent();
 		List<String> tagList = p.getTags().stream().map(t -> t.getTagName()).collect(Collectors.toList());
 		String createdAt = String.format("%1$tY-%1$tm-%1$td", p.getCreatedAt());
-		String logoPath = "src/main/resources/img/logo.jpg";
 
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 
@@ -90,26 +116,26 @@ public class FileService {
 
 		addMetaData(document, title, createdBy, tagList.toString());
 
-		PdfPTable table = new PdfPTable(3);
+		PdfPTable table = new PdfPTable(2);
 		table.setWidthPercentage(100);
-		table.setWidths(new int[] { 1, 2, 3 });
-		table.addCell(createImageCell(logoPath));
-
-		Paragraph pTitle = new Paragraph(title, FONT_TITLE);
-		pTitle.setAlignment(Element.ALIGN_LEFT);
-
-		Paragraph pAuthor = new Paragraph("Author: " + createdBy, FONT_AUTHOR);
-		pAuthor.setAlignment(Element.ALIGN_LEFT);
-
-		table.addCell(createTextCellWith2Paragraphs(pTitle, pAuthor, Element.ALIGN_CENTER));
-
-		Paragraph pCreatedAt = new Paragraph(createdAt, FONT_DATE);
-		pCreatedAt.setAlignment(Element.ALIGN_RIGHT);
-		table.addCell(createTextCell(pCreatedAt, Element.ALIGN_TOP));
+		addCustomRows(table);
+		addRows(table, title);
 
 		document.add(table);
 
-		document.add(addEmptyLines(1));
+		Paragraph pCreatedAt = new Paragraph(createdAt, FONT_DATE);
+		pCreatedAt.setAlignment(Element.ALIGN_RIGHT);
+		document.add(pCreatedAt);
+
+		/*
+		 * Paragraph pTitle = new Paragraph(title, FONT_TITLE);
+		 * pTitle.setAlignment(Element.ALIGN_LEFT); document.add(pTitle);
+		 */
+
+		Paragraph pAuthor = new Paragraph("Author: " + createdBy, FONT_AUTHOR);
+		pAuthor.setAlignment(Element.ALIGN_LEFT);
+		addEmptyLine(pAuthor, 1);
+		document.add(pAuthor);
 
 		Paragraph pContent = new Paragraph(content, FONT_CONTENT);
 		pContent.setAlignment(Element.ALIGN_JUSTIFIED);
@@ -119,13 +145,26 @@ public class FileService {
 
 		InputStream in = new ByteArrayInputStream(out.toByteArray());
 
-		manipulatePdf(in, out, document, FONT_PAGE_NUMBER);
+		// pagination
+		PdfReader reader = new PdfReader(in);
+		int n = reader.getNumberOfPages();
+		PdfStamper stamper = new PdfStamper(reader, out);
+		PdfContentByte pagecontent;
+
+		for (int i = 0; i < n;) {
+			pagecontent = stamper.getUnderContent(++i);
+			ColumnText.showTextAligned(pagecontent, Element.ALIGN_RIGHT,
+					new Phrase(String.format("%s of %s", i, n), FONT_PAGE_NUMBER), document.right(),
+					document.bottom() - 10, 0);
+		}
+
+		stamper.close();
 
 		in = new ByteArrayInputStream(out.toByteArray());
 
 		return in;
-	}
 
+	}
 
 	private void addMetaData(Document document, String title, String author, String tagList) {
 		document.addTitle(title);
@@ -133,342 +172,461 @@ public class FileService {
 		document.addAuthor(author);
 	}
 
-	private static Paragraph addEmptyLines(int number) {
-		Paragraph paragraph = new Paragraph();
-
+	private static void addEmptyLine(Paragraph paragraph, int number) {
 		for (int i = 0; i < number; i++) {
 			paragraph.add(new Paragraph(" "));
 		}
-
-		return paragraph;
 	}
 
-	public static PdfPCell createImageCell(String path) throws DocumentException, IOException {
-		Image img = Image.getInstance(path);
-		img.scaleToFit(50, 50);
-		PdfPCell cell = new PdfPCell(img, true);
-		cell.setBorder(Rectangle.NO_BORDER);
-		return cell;
+	private void addRows(PdfPTable table, String text) {
+		Paragraph p = new Paragraph(text, FONT_TITLE);
+		p.setAlignment(Element.ALIGN_LEFT);
+
+		PdfPCell textCell = new PdfPCell(p);
+		textCell.setBorder(Rectangle.NO_BORDER);
+		textCell.setPaddingLeft(-190);
+		table.addCell(textCell);
 	}
 
-	public static PdfPCell createTextCell(Paragraph p1, int alignment) throws DocumentException, IOException {
-		PdfPCell cell = new PdfPCell();
-		cell.addElement(p1);
-		cell.setVerticalAlignment(alignment);
-		cell.setBorder(Rectangle.NO_BORDER);
-		return cell;
+	private void addCustomRows(PdfPTable table) throws URISyntaxException, BadElementException, IOException {
+		Path path = Paths.get(ClassLoader.getSystemResource("img/logo.jpg").toURI());
+		Image img = Image.getInstance(path.toAbsolutePath().toString());
+		img.scalePercent(50);
+
+		PdfPCell imageCell = new PdfPCell(img);
+		imageCell.setBorder(Rectangle.NO_BORDER);
+		table.addCell(imageCell);
 	}
 
-	public static PdfPCell createTextCellWith2Paragraphs(Paragraph p1, Paragraph p2, int alignment)
-			throws DocumentException, IOException {
-		PdfPCell cell = new PdfPCell();
-		cell.addElement(p1);
-		cell.addElement(p2);
-		cell.setVerticalAlignment(alignment);
-		cell.setBorder(Rectangle.NO_BORDER);
-		return cell;
-	}
+	// fine metodo generazione PDF
 
-	public void manipulatePdf(InputStream in, OutputStream out, Document document, Font font)
-			throws IOException, DocumentException {
-		PdfReader reader = new PdfReader(in);
-		int n = reader.getNumberOfPages();
-		PdfStamper stamper = new PdfStamper(reader, out);
-		PdfContentByte pagecontent;
-		for (int i = 0; i < n;) {
-			pagecontent = stamper.getOverContent(++i);
-			ColumnText.showTextAligned(pagecontent, Element.ALIGN_RIGHT,
-					new Phrase(String.format("page %s of %s", i, n), font), document.right(), document.bottom() - 10,
-					0);
-		}
-		stamper.close();
-		reader.close();
-	}
+	// inizio metodo generazione XLS
+	HSSFFont font = null;
 
-	public InputStream createExcel() throws IOException {
+	public InputStream createExcel() throws FileNotFoundException, IOException {
+		HSSFWorkbook workbook = new HSSFWorkbook();
+
+		createExcelAuthorReport(workbook);
+		createExcelReaderReport(workbook);
+		createExcelPostReport(workbook);
 
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
-		HSSFWorkbook wb1 = new HSSFWorkbook();
 
-		/* prepare the lists */
-		List<Post> pList = postRepository.findAll();
+		workbook.write(out);
+		workbook.close();
 
-		List<Long> ids = pList.stream().map(x -> x.getCreatedBy()).collect(Collectors.toList());
-		Set<Users> aList = new HashSet<Users>();
-		for (Long id : ids) {
-			Optional<Users> u = userRepository.findById(id);
-			aList.add(u.get());
-		}
-
-		List<Comment> cList = commentRepository.findAll();
-		List<Long> ids2 = cList.stream().map(x -> x.getCreatedBy()).collect(Collectors.toList());
-		Set<Users> rList = new HashSet<Users>();
-		for (Long id : ids2) {
-			Optional<Users> u = userRepository.findById(id);
-			rList.add(u.get());
-		}
-
-		/* creation of the sheets */
-		out = createSheets(wb1, pList, aList, rList, out);
-
-
-		/* write values into output stream */
-		try {
-			wb1.write(out);
-		} catch (IOException e) {
-			System.out.println(e.toString());
-		} finally {
-			try {
-				out.close();
-			} catch (IOException e) {
-				System.out.println(e.toString());
-			}
-		}
-		wb1.close();
-
-		/* pass output stream as input stram */
 		return new ByteArrayInputStream(out.toByteArray());
 	}
 
-	public ByteArrayOutputStream createSheets(HSSFWorkbook wb1, List<Post> pList, Set<Users> aList, Set<Users> rList,
-			ByteArrayOutputStream out)
-			throws IOException {
+	public void createExcelPostReport(HSSFWorkbook workbook) {
+		HSSFSheet sheet = workbook.createSheet("Post Report");
 
-		// <------------------------------------------------------------POST------------------------------------------------------------------------------------------------->
-		Sheet sheet = wb1.createSheet("Post");
-		sheet = wb1.getSheetAt(0);
+		font = sheet.getWorkbook().createFont();
+		font.setBold(true);
 
-		Row row = sheet.createRow(0);
-		Cell cell = row.createCell(0);
-		cell.setCellValue((String) "Post");
-		cell = row.createCell(1);
-		cell.setCellValue((String) "Title");
-		cell = row.createCell(2);
-		cell.setCellValue((String) "is free");
-		cell = row.createCell(3);
-		cell.setCellValue((String) "Total view");
-		cell = row.createCell(4);
-		cell.setCellValue((String) "Unique View");
-		cell = row.createCell(5);
-		cell.setCellValue((String) "is banned");
-		cell = row.createCell(6);
-		cell.setCellValue((String) "AVG Rating");
-		cell = row.createCell(7);
-		cell.setCellValue((String) "number of purchases");
+		CellStyle cellBoldCenterClear = createSheet(sheet, true, HorizontalAlignment.CENTER, false);
+		CellStyle cellBoldRightClear = createSheet(sheet, true, HorizontalAlignment.RIGHT, false);
+		CellStyle cellBoldRightColor = createSheet(sheet, true, HorizontalAlignment.RIGHT, true);
+		CellStyle cellClear = createSheet(sheet, false, null, false);
+		CellStyle cellClearRight = createSheet(sheet, false, HorizontalAlignment.RIGHT, false);
+		CellStyle cellClearCenter = createSheet(sheet, false, HorizontalAlignment.CENTER, false);
+		CellStyle cellColor = createSheet(sheet, false, null, true);
+		CellStyle cellColorRight = createSheet(sheet, false, HorizontalAlignment.RIGHT, true);
+		CellStyle cellColorCenter = createSheet(sheet, false, HorizontalAlignment.CENTER, true);
+
+		List<Post> allPosts = postRepository.findAll();
+		List<PostViewed> allPostViewed = postViewedRepository.findAll();
+
+		List<PostExcel> postExcel = new ArrayList<PostExcel>();
+		for (Post post : allPosts) {
+			List<PostViewed> postsViewed = allPostViewed.stream().filter(p -> (post.getId() == p.getPost().getId()))
+					.collect(Collectors.toList());
+
+			Long idPost = post.getId();
+			String title = post.getTitle();
+
+			boolean isFree = (post.getCredit().getCreditImport() == 0);
+
+			Long totalViews = Long.valueOf(postsViewed.size());
+
+			Long uniqueViews = Long.valueOf(StreamEx.of(postsViewed).distinct(PostViewed::getIp).toList().size());
+
+			boolean isBanned = false;
+			LocalDate loc = LocalDate.now();
+			for (Blacklist bl : post.getBlacklists()) {
+				if (bl.getCommentId() == 0 && bl.getBlacklistedUntil()
+						.isAfter(LocalDate.of(loc.getYear(), loc.getMonthValue(), loc.getDayOfMonth()))) {
+					isBanned = true;
+					break;
+				}
+			}
+
+			Double avgRating = ((post.getAvgRating() == null) ? 0 : post.getAvgRating());
+
+			Long numberOfPurchases = Long.valueOf(post.getUsersWhoBought().size());
+
+			postExcel.add(new PostExcel(idPost, title, (isFree ? "Y" : "N"), totalViews, uniqueViews,
+					(isBanned ? "Y" : "N"), avgRating, numberOfPurchases));
+		}
+
+		String[] header = { "Post", "Title", "is Free", "Total Views", "Unique Views", "is Banned", "AVG Rating",
+				"Number of Purchases" };
 
 		int rowCount = 0;
 
-		for (Post p : pList) {
+		Row row = sheet.createRow(++rowCount);
+		for (int j = 1; j <= header.length; j++) {
+			Cell cell = row.createCell(j);
+			cell.setCellStyle(cellBoldCenterClear);
+			cell.setCellValue(header[j - 1]);
+		}
 
+		for (PostExcel post : postExcel) {
 			row = sheet.createRow(++rowCount);
 
-			cell = row.createCell(0);
-			cell.setCellValue((Long) p.getId());
-
-			cell = row.createCell(1);
-			cell.setCellValue((String) p.getTitle());
+			Cell cell = row.createCell(1);
+			cell.setCellValue(post.getIdPost());
+			colorCell(cellClear, cellColor, rowCount, cell);
 
 			cell = row.createCell(2);
-			String YorN = "";
-			YorN = (p.getCredit().getId() == (long) 5) ? "Y" : "N";
-			cell.setCellValue((String) YorN);
+			cell.setCellValue(post.getTitle());
+			colorCell(cellClear, cellColor, rowCount, cell);
 
 			cell = row.createCell(3);
-			List<PostViewed> pv = postViewdRepository.findByPost(p);
-			cell.setCellValue((Integer) pv.size());
+			cell.setCellValue(post.getIsFree());
+			colorCell(cellClearCenter, cellColorCenter, rowCount, cell);
 
 			cell = row.createCell(4);
-			List<PostViewed> filteredByIp = StreamEx.of(pv).distinct(PostViewed::getIp).toList();
-			cell.setCellValue((int) filteredByIp.size());
+			cell.setCellValue(post.getTotalViews());
+			colorCell(cellClear, cellColor, rowCount, cell);
 
 			cell = row.createCell(5);
-			List<Blacklist> bl = blacklistRepository
-					.findByUserAndIsVerifiedTrue(userRepository.findById(p.getCreatedBy()).get());
-			String banned = "";
-			banned = ((bl.isEmpty()) && (p.isVisible())) ? "N" : "Y";
-			cell.setCellValue((String) banned);
+			cell.setCellValue(post.getUniqueViews());
+			colorCell(cellClear, cellColor, rowCount, cell);
 
 			cell = row.createCell(6);
-			if (p.getAvgRating() != null)
-				cell.setCellValue((Double) p.getAvgRating());
-			else
-				cell.setCellValue((Double) 0.0);
+			cell.setCellValue(post.getIsBanned());
+			colorCell(cellClearCenter, cellColorCenter, rowCount, cell);
 
 			cell = row.createCell(7);
-			// EXCEPT ROLE_READER, THE OTHER ROLES CAN VIEW THE POST
-			int cnt = 0;
-			if (p.getCredit().getId() != (long) 5) {
-				List<Users> ulist = userRepository.findAll();
-				for (Users u : ulist) {
-					if (u.getRoles().size() < 2) {
-						// CONTAINS ONLY ONE ROLE
-						List<Long> id = u.getRoles().stream().map(x -> x.getId()).collect(Collectors.toList());
-						if (id.get(0) == (long) 4) {
-							Set<Post> postBoughtList = u.getPosts();
-							if (postBoughtList.stream().filter(post -> (post.getId() == p.getId())).count() == 1)
-								cnt++;
-						}
+			cell.setCellValue(new DecimalFormat("0.00").format(post.getAvgRating()));
+			colorCell(cellClearRight, cellColorRight, rowCount, cell);
 
-					}
-				}
-			}
-			cell.setCellValue((int) cnt);
+			cell = row.createCell(8);
+			cell.setCellValue(post.getNumberOfPurchases());
+			colorCell(cellClear, cellColor, rowCount, cell);
 		}
 
-		// <------------------------------------------------------------AUTHOR------------------------------------------------------------------------------------------------->
-		Sheet sheet2 = wb1.createSheet("Author");
-		sheet2 = wb1.getSheetAt(1);
+		String[] footer = { "COUNT(B3:B" + (postExcel.size() + 2) + ")", "", "",
+				"SUM(E3:E" + (postExcel.size() + 2) + ")", "SUM(F3:F" + (postExcel.size() + 2) + ")",
+				"COUNTIF(G3:G" + (postExcel.size() + 2) + ", \"Y\")", "", "SUM(I3:I" + (postExcel.size() + 2) + ")" };
 
-		row = sheet2.createRow(0);
-		cell = row.createCell(0);
-		cell.setCellValue((String) "Author");
-		cell = row.createCell(1);
-		cell.setCellValue((String) "Total Posts");
-		cell = row.createCell(2);
-		cell.setCellValue((String) "Published Post");
-		cell = row.createCell(3);
-		cell.setCellValue((String) "Post to Check(isVisible=false)");
-		cell = row.createCell(4);
-		cell.setCellValue((String) "Banned Post");
-
-		// FETCH THE VALUES DEPENDS ON EACH AUTHOR
-		rowCount = 0;
-		// int numTP, numPP, numPC, numBP = 0;
-		int Psum[] = { 0, 0, 0, 0 };
-		for (Users u : aList) {
-
-			row = sheet2.createRow(++rowCount);
-
-			cell = row.createCell(0);
-			cell.setCellValue((String) u.getUsername());
-
-
-			cell = row.createCell(1);
-			List<Post> posts = postRepository.findByCreatedBy(u.getId());
-			cell.setCellValue((int) posts.size());
-			Psum[0] = Psum[0] + posts.size();
-
-			cell = row.createCell(2);
-			List<Post> vposts = postRepository.findByIsVisibleTrueAndCreatedBy(u.getId());
-			cell.setCellValue((int) vposts.size());
-			Psum[1] = Psum[1] + vposts.size();
-
-			cell = row.createCell(3);
-			cell.setCellValue((int) posts.size() - (int) vposts.size());
-			Psum[2] = Psum[2] + posts.size() - vposts.size();
-
-			cell = row.createCell(4);
-			List<Blacklist> blist = blacklistRepository.findByUserAndIsVerifiedTrue(u);
-			blist.stream().filter(x -> x.getPost().getId() != 0);
-			cell.setCellValue((int) blist.size());
-			Psum[3] = Psum[3] + blist.size();
-
+		row = sheet.createRow(++rowCount);
+		for (int j = 1; j <= footer.length; j++) {
+			Cell cell = row.createCell(j);
+			colorCell(cellBoldRightClear, cellBoldRightColor, rowCount, cell);
+			if (footer[j - 1] != "")
+				cell.setCellFormula(footer[j - 1]);
+			else
+				cell.setCellValue(footer[j - 1]);
 		}
 
-		row = sheet2.createRow(++rowCount);
-		cell = row.createCell(0);
-		cell.setCellValue((String) "Total");
-
-		for (int i = 1; i < 5; i++) {
-			cell = row.createCell(i);
-			cell.setCellValue((int) Psum[i - 1]);
-		}
-
-		// <------------------------------------------------------------READER------------------------------------------------------------------------------------------------->
-		Sheet sheet3 = wb1.createSheet("Reader");
-		sheet3 = wb1.getSheetAt(2);
-
-		row = sheet3.createRow(0);
-		cell = row.createCell(0);
-		cell.setCellValue((String) "Reader");
-		cell = row.createCell(1);
-		cell.setCellValue((String) "Total Comment");
-		cell = row.createCell(2);
-		cell.setCellValue((String) "Published Comment");
-		cell = row.createCell(3);
-		cell.setCellValue((String) "Comment to check");
-		cell = row.createCell(4);
-		cell.setCellValue((String) "Banned Comment");
-		cell = row.createCell(5);
-		cell.setCellValue((String) "Bought Post");
-		cell = row.createCell(6);
-		cell.setCellValue((String) "Credit");
-
-		// FETCH THE VALUES DEPENDS ON EACH READER
-		rowCount = 0;
-		// int numTCom=0, numPCom=0, numComC=0, numBC=0, numBouP =0;
-		int Csum[] = { 0, 0, 0, 0, 0 };
-		for (Users u : rList) {
-
-			row = sheet3.createRow(++rowCount);
-
-			cell = row.createCell(0);
-			cell.setCellValue((Long) u.getId());
-
-			cell = row.createCell(1);
-			List<Comment> comments = commentRepository.findByCreatedBy(u.getId());
-			cell.setCellValue((int) comments.size());
-			// numTCom = numTCom + comments.size();
-			Csum[0] = Csum[0] + comments.size();
-
-			cell = row.createCell(2);
-			List<Comment> vcomments = commentRepository.findByIsVisibleTrueAndCreatedBy(u.getId());
-			cell.setCellValue((int) vcomments.size());
-			// numPCom = numPCom + vcomments.size();
-			Csum[1] = Csum[1] + vcomments.size();
-			
-			cell = row.createCell(3);
-			cell.setCellValue((int) comments.size() - vcomments.size());
-			// numComC = numComC + comments.size() - vcomments.size();
-			Csum[2] = Csum[2] + comments.size() - comments.size();
-			
-			cell = row.createCell(4);
-			List<Blacklist> blist = blacklistRepository.findByUserAndIsVerifiedTrue(u);
-			blist.stream().filter(x -> x.getPost().getId() == 0);
-			cell.setCellValue((int) blist.size());
-			// numBC = numBC + blist.size();
-			Csum[3] = Csum[3] + blist.size();
-			
-			cell = row.createCell(5);
-			Set<Post> posts = u.getPosts();
-			cell.setCellValue((int) posts.size());
-			// numBouP = numBouP + posts.size();
-			Csum[4] = Csum[4] + posts.size();
-
-			cell = row.createCell(6);
-			cell.setCellValue((int) u.getCredit());
-
-		}
-
-		row = sheet3.createRow(++rowCount);
-		cell = row.createCell(0);
-		cell.setCellValue((String) "Total");
-		for (int i = 1; i < 6; i++) {
-			cell = row.createCell(i);
-			cell.setCellValue((int) Csum[i - 1]);
-		}
-
-		return out;
+		sheet.autoSizeColumn(1);
+		sheet.autoSizeColumn(2);
+		sheet.autoSizeColumn(3);
+		sheet.autoSizeColumn(4);
+		sheet.autoSizeColumn(5);
+		sheet.autoSizeColumn(6);
+		sheet.autoSizeColumn(7);
+		sheet.autoSizeColumn(8);
 	}
 
-	/*
-	 * impossible to do because of row and cell I must use same one here but
-	 * difficult to pass it public ByteArrayOutputStream
-	 * createAuthorSheet(HSSFWorkbook wb1, List<Post> listname,
-	 * ByteArrayOutputStream out, int num) throws IOException { // TODO
-	 * Auto-generated method stub Sheet sheet2 = wb1.createSheet("Author");
-	 * 
-	 * sheet2 = wb1.getSheetAt(num); Row row = sheet2.createRow(0); Cell cell =
-	 * row.createCell(0); cell.setCellValue((String) "Author"); cell =
-	 * row.createCell(1); cell.setCellValue((String) "Total Posts"); cell =
-	 * row.createCell(2); cell.setCellValue((String) "Published Post"); cell =
-	 * row.createCell(3); cell.setCellValue((String)
-	 * "Post to Check(isVisible=false)"); cell = row.createCell(4);
-	 * cell.setCellValue((String) "Banned Post");
-	 * 
-	 * //for operation to fetch values depends on each author
-	 * 
-	 * return out; }
-	 */
+	public void createExcelReaderReport(HSSFWorkbook workbook) {
+		HSSFSheet sheet = workbook.createSheet("Reader Report");
+
+		font = sheet.getWorkbook().createFont();
+		font.setBold(true);
+
+		CellStyle cellBoldCenterClear = createSheet(sheet, true, HorizontalAlignment.CENTER, false);
+		CellStyle cellBoldCenterColor = createSheet(sheet, true, HorizontalAlignment.CENTER, true);
+		CellStyle cellBoldRightClear = createSheet(sheet, true, HorizontalAlignment.RIGHT, false);
+		CellStyle cellBoldRightColor = createSheet(sheet, true, HorizontalAlignment.RIGHT, true);
+		CellStyle cellClear = createSheet(sheet, false, null, false);
+		CellStyle cellColor = createSheet(sheet, false, null, true);
+
+		Role roleReader = roleRepository.findByName(RoleName.ROLE_READER).get();
+
+		List<Comment> allComments = commentRepository.findAll();
+
+		List<Long> usersWhoCommented = allComments.stream().map(comment -> comment.getCreatedBy()).distinct()
+				.collect(Collectors.toList());
+
+		/*
+		 * add all users who have the role READER or has at least 1 comment with
+		 * DISTINCT
+		 */
+		List<Users> allUsers = userRepository.findByRolesOrIdIn(roleReader, usersWhoCommented).stream().distinct()
+				.collect(Collectors.toList());
+
+		List<Long> idComments = allComments.stream().map(comment -> comment.getId()).collect(Collectors.toList());
+
+		/* select only the relevant records */
+		List<Blacklist> allBlacklists = blacklistRepository.findByCommentIdInAndBlacklistedUntilAfter(idComments,
+				LocalDate.now());
+
+		List<ReaderExcel> readerExcel = new ArrayList<ReaderExcel>();
+		for (Users user : allUsers) {
+			List<Comment> comments = allComments.stream().filter(c -> (user.getId() == c.getCreatedBy()))
+					.collect(Collectors.toList());
+
+			Long totalComments = Long.valueOf(comments.size());
+			Long publishedComments = Long
+					.valueOf(comments.stream().filter(c -> c.isVisible()).collect(Collectors.toList()).size());
+
+			List<Comment> commentsNotVisible = comments.stream().filter(p -> !p.isVisible())
+					.collect(Collectors.toList());
+
+			Long totalBannedComments = Long.valueOf(0);
+			Long commentsToCheck = Long.valueOf(0);
+			for (Comment c : commentsNotVisible) {
+				List<Blacklist> postBlacklist = allBlacklists.stream().filter(b -> (b.getCommentId() == c.getId()))
+						.collect(Collectors.toList());
+
+				if (postBlacklist.size() > 0)
+					totalBannedComments++;
+				else
+					commentsToCheck++;
+			}
+
+			Long boughPosts = Long.valueOf(user.getPosts().size());
+			Long credits = Long.valueOf(user.getCredit());
+
+			readerExcel.add(new ReaderExcel(user.getUsername(), totalComments, publishedComments, commentsToCheck,
+					totalBannedComments, boughPosts, credits));
+		}
+
+		String[] header = { "Reader", "Total Comments", "Published Comments", "Comments to Check", "Banned Comments",
+				"Bought Posts", "Credits" };
+
+		int rowCount = 0;
+
+		Row row = sheet.createRow(++rowCount);
+		for (int j = 1; j <= header.length; j++) {
+			Cell cell = row.createCell(j);
+			cell.setCellStyle(cellBoldCenterClear);
+			cell.setCellValue(header[j - 1]);
+		}
+
+		for (ReaderExcel reader : readerExcel) {
+			row = sheet.createRow(++rowCount);
+
+			Cell cell = row.createCell(1);
+			cell.setCellValue(reader.getUsername());
+			colorCell(cellClear, cellColor, rowCount, cell);
+
+			cell = row.createCell(2);
+			cell.setCellValue(reader.getTotalComments());
+			colorCell(cellClear, cellColor, rowCount, cell);
+
+			cell = row.createCell(3);
+			cell.setCellValue(reader.getPublishedComments());
+			colorCell(cellClear, cellColor, rowCount, cell);
+
+			cell = row.createCell(4);
+			cell.setCellValue(reader.getCommentsToCheck());
+			colorCell(cellClear, cellColor, rowCount, cell);
+
+			cell = row.createCell(5);
+			cell.setCellValue(reader.getBannedComments());
+			colorCell(cellClear, cellColor, rowCount, cell);
+
+			cell = row.createCell(6);
+			cell.setCellValue(reader.getBoughtPosts());
+			colorCell(cellClear, cellColor, rowCount, cell);
+
+			cell = row.createCell(7);
+			cell.setCellValue(reader.getCredits());
+			colorCell(cellClear, cellColor, rowCount, cell);
+		}
+
+		String[] footer = { "Total", "SUM(C3:C" + (readerExcel.size() + 2) + ")",
+				"SUM(D3:D" + (readerExcel.size() + 2) + ")", "SUM(E3:E" + (readerExcel.size() + 2) + ")",
+				"SUM(F3:F" + (readerExcel.size() + 2) + ")", "SUM(G3:G" + (readerExcel.size() + 2) + ")",
+				"SUM(H3:H" + (readerExcel.size() + 2) + ")" };
+
+		row = sheet.createRow(++rowCount);
+		for (int j = 1; j <= footer.length; j++) {
+			Cell cell = row.createCell(j);
+			if (j == 1) {
+				colorCell(cellBoldCenterClear, cellBoldCenterColor, rowCount, cell);
+				cell.setCellValue(footer[j - 1]);
+			} else {
+				colorCell(cellBoldRightClear, cellBoldRightColor, rowCount, cell);
+				cell.setCellFormula(footer[j - 1]);
+			}
+		}
+
+		sheet.autoSizeColumn(1);
+		sheet.autoSizeColumn(2);
+		sheet.autoSizeColumn(3);
+		sheet.autoSizeColumn(4);
+		sheet.autoSizeColumn(5);
+		sheet.autoSizeColumn(6);
+		sheet.autoSizeColumn(7);
+	}
+
+	public void createExcelAuthorReport(HSSFWorkbook workbook) {
+		HSSFSheet sheet = workbook.createSheet("Author Report");
+
+		font = sheet.getWorkbook().createFont();
+		font.setBold(true);
+
+		CellStyle cellBoldCenterClear = createSheet(sheet, true, HorizontalAlignment.CENTER, false);
+		CellStyle cellBoldCenterColor = createSheet(sheet, true, HorizontalAlignment.CENTER, true);
+		CellStyle cellBoldRightClear = createSheet(sheet, true, HorizontalAlignment.RIGHT, false);
+		CellStyle cellBoldRightColor = createSheet(sheet, true, HorizontalAlignment.RIGHT, true);
+		CellStyle cellClear = createSheet(sheet, false, null, false);
+		CellStyle cellColor = createSheet(sheet, false, null, true);
+
+		Role roleEditor = roleRepository.findByName(RoleName.ROLE_EDITOR).get();
+
+		List<Post> allPosts = postRepository.findAll();
+
+		List<Long> usersWhoPosted = allPosts.stream().map(post -> post.getCreatedBy()).distinct()
+				.collect(Collectors.toList());
+
+		/*
+		 * add all users who have the role EDITOR or has created at least 1 post with
+		 * DISTINCT
+		 */
+		List<Users> allUsers = userRepository.findByRolesOrIdIn(roleEditor, usersWhoPosted).stream().distinct()
+				.collect(Collectors.toList());
+
+		List<Long> idPosts = allPosts.stream().map(post -> post.getId()).collect(Collectors.toList());
+
+		/* select only the relevant records */
+		List<Blacklist> allBlacklists = blacklistRepository.findByPostIdInAndCommentId(idPosts, Long.valueOf(0));
+
+		List<AuthorExcel> authorExcel = new ArrayList<AuthorExcel>();
+		for (Users user : allUsers) {
+			List<Post> posts = allPosts.stream().filter(p -> (user.getId() == p.getCreatedBy()))
+					.collect(Collectors.toList());
+
+			Long totalPosts = Long.valueOf(posts.size());
+			Long publishedPosts = Long.valueOf(
+					posts.stream().filter(p -> (p.isVisible() && p.isApproved())).collect(Collectors.toList()).size());
+			Long postsToCheck = Long.valueOf(
+					posts.stream().filter(p -> !p.isVisible() && p.isApproved()).collect(Collectors.toList()).size());
+
+			List<Post> postToVerify = posts.stream().filter(p -> (!p.isVisible() && !p.isApproved()))
+					.collect(Collectors.toList());
+
+			Long totalBannedPosts = Long.valueOf(0);
+			for (Post p : postToVerify) {
+				List<Blacklist> postBlacklist = allBlacklists.stream()
+						.filter(b -> ((p.getId() == b.getPost().getId()) && b.isVerified() == true))
+						.collect(Collectors.toList());
+
+				if (postBlacklist.size() > 0)
+					totalBannedPosts++;
+			}
+
+			authorExcel.add(
+					new AuthorExcel(user.getUsername(), totalPosts, publishedPosts, postsToCheck, totalBannedPosts));
+		}
+
+		String[] header = { "Author", "Total Posts", "Published Posts", "Posts to Check", "Banned Posts" };
+
+		int rowCount = 0;
+
+		Row row = sheet.createRow(++rowCount);
+		for (int j = 1; j <= header.length; j++) {
+			Cell cell = row.createCell(j);
+			cell.setCellStyle(cellBoldCenterClear);
+			cell.setCellValue(header[j - 1]);
+		}
+
+		for (AuthorExcel author : authorExcel) {
+			row = sheet.createRow(++rowCount);
+
+			Cell cell = row.createCell(1);
+			cell.setCellValue(author.getAuthor());
+			colorCell(cellClear, cellColor, rowCount, cell);
+
+			cell = row.createCell(2);
+			cell.setCellValue(author.getTotalPosts());
+			colorCell(cellClear, cellColor, rowCount, cell);
+
+			cell = row.createCell(3);
+			cell.setCellValue(author.getPublishedPosts());
+			colorCell(cellClear, cellColor, rowCount, cell);
+
+			cell = row.createCell(4);
+			cell.setCellValue(author.getPostsToCheck());
+			colorCell(cellClear, cellColor, rowCount, cell);
+
+			cell = row.createCell(5);
+			cell.setCellValue(author.getBannedPosts());
+			colorCell(cellClear, cellColor, rowCount, cell);
+		}
+
+		String[] footer = { "Total", "SUM(C3:C" + (authorExcel.size() + 2) + ")",
+				"SUM(D3:D" + (authorExcel.size() + 2) + ")", "SUM(E3:E" + (authorExcel.size() + 2) + ")",
+				"SUM(F3:F" + (authorExcel.size() + 2) + ")" };
+
+		row = sheet.createRow(++rowCount);
+		for (int j = 1; j <= footer.length; j++) {
+			Cell cell = row.createCell(j);
+			if (j == 1) {
+				colorCell(cellBoldCenterClear, cellBoldCenterColor, rowCount, cell);
+				cell.setCellValue(footer[j - 1]);
+			} else {
+				colorCell(cellBoldRightClear, cellBoldRightColor, rowCount, cell);
+				cell.setCellFormula(footer[j - 1]);
+			}
+		}
+
+		sheet.autoSizeColumn(1);
+		sheet.autoSizeColumn(2);
+		sheet.autoSizeColumn(3);
+		sheet.autoSizeColumn(4);
+		sheet.autoSizeColumn(5);
+	}
+
+	private CellStyle createSheet(HSSFSheet sheet, boolean bold, HorizontalAlignment alignment, boolean colored) {
+		CellStyle cellStyle = sheet.getWorkbook().createCellStyle();
+
+		if (alignment != null)
+			cellStyle.setAlignment(alignment);
+
+		if (bold)
+			cellStyle.setFont(font);
+
+		if (colored)
+			cellStyle.setFillForegroundColor(HSSFColorPredefined.GREY_25_PERCENT.getIndex());
+		else
+			cellStyle.setFillForegroundColor(HSSFColorPredefined.WHITE.getIndex());
+
+		cellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+		setBorders(cellStyle);
+
+		cellStyle.setLocked(true);
+
+		return cellStyle;
+	}
+
+	private void setBorders(CellStyle cellClear) {
+		cellClear.setBorderRight(BorderStyle.THIN);
+		cellClear.setRightBorderColor(HSSFColorPredefined.BLACK.getIndex());
+		cellClear.setBorderLeft(BorderStyle.THIN);
+		cellClear.setLeftBorderColor(HSSFColorPredefined.BLACK.getIndex());
+	}
+
+	private void colorCell(CellStyle cellClear, CellStyle cellColor, int rowCount, Cell cell) {
+		if (rowCount % 2 == 0)
+			cell.setCellStyle(cellColor);
+		else
+			cell.setCellStyle(cellClear);
+	}
 
 }

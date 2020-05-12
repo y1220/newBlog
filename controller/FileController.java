@@ -1,5 +1,7 @@
 package it.course.myblog.controller;
 
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStream;
 import java.time.Instant;
 import java.util.Optional;
@@ -114,42 +116,33 @@ public class FileController {
 
 	}
 
-	@PreAuthorize("hasRole('ADMIN') ")
-	@GetMapping("/excel")
+	@GetMapping("/excel-report")
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<?> downloadExcel(HttpServletRequest request) {
 
-		InputStream pEx, rEx, aEx = null;
-		ResponseEntity<InputStreamResource> response = null;
 		try {
-			pEx = fileService.createExcel();
-			// rEx = fileService.createExcelOfReader();
-			// aEx = fileService.createExcelOfAuthor();
+			InputStream excelFile = fileService.createExcel();
 
-			// Set headers
 			HttpHeaders headers = new HttpHeaders();
-			headers.setContentType(
-					MediaType.parseMediaType("application/vnd.ms-excel"));
-			headers.add("Access-Control-Allow-Origin", "*");
-			headers.add("Access-Control-Allow-Methods", "GET");
-			headers.add("Access-Control-Allow-Headers", "Content-Type");
-			headers.add("Content-Disposition", "attachment; filename=3ExcelSheets.xls");
-			headers.add("Cache-Control", "no-cache, no-store, must-revalidate");
-			headers.add("Pragma", "no-cache");
-			headers.add("Expires", "0");
+			headers.set("Content-Type", "application/vnd.ms-excel;");
+			headers.set("content-length", Integer.toString(excelFile.available()));
+			headers.set("Content-Disposition", "attachment; filename=Report.xls");
 
-			response = new ResponseEntity<InputStreamResource>(new InputStreamResource(pEx), headers,
-					HttpStatus.OK);
-		} catch (Exception e) {
-			log.error("Some error occurs in Excel generation: " + e.getMessage());
-			response = new ResponseEntity<InputStreamResource>(
-					new InputStreamResource(null, "Some error occurs in Excel generation: " + e.getMessage()),
-					HttpStatus.INTERNAL_SERVER_ERROR);
+			log.info("Succesfully generated Excel document");
+			return new ResponseEntity<InputStreamResource>(new InputStreamResource(excelFile), headers, HttpStatus.OK);
+		} catch (FileNotFoundException e) {
+			log.error(e.getMessage());
+			return new ResponseEntity<ApiResponseCustom>(
+					new ApiResponseCustom(Instant.now(), 503, null,
+							"Something went wrong during the generation of the PDF", request.getRequestURI()),
+					HttpStatus.SERVICE_UNAVAILABLE);
+		} catch (IOException e) {
+			log.error(e.getMessage());
+			return new ResponseEntity<ApiResponseCustom>(
+					new ApiResponseCustom(Instant.now(), 503, null,
+							"Something went wrong during the generation of the PDF", request.getRequestURI()),
+					HttpStatus.SERVICE_UNAVAILABLE);
 		}
-
-		return response;
-
 	}
-
-
 
 }
