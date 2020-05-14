@@ -78,6 +78,10 @@ public class Users extends DateAudit {
 	inverseJoinColumns = @JoinColumn(name="post_id"))
 	private Set<Post> posts = new HashSet<>();
 	
+	@ManyToMany(fetch = FetchType.EAGER)
+	@JoinTable(name = "user_preferred_tags", joinColumns = @JoinColumn(name = "user_id"), inverseJoinColumns = @JoinColumn(name = "tag_id"))
+	private Set<Tag> preferredTags = new HashSet<>();
+
 	@Size(max = 64)
 	private String identifierCode;
 	
@@ -112,7 +116,7 @@ public class Users extends DateAudit {
 		this.hasNewsletter = hasNewsletter;
 		this.roles = roles;
 	}
-			
+
 	
 
 }

@@ -18,8 +18,8 @@ public interface TagRepository extends JpaRepository<Tag, Long>{
 	
 	List<Tag> findBytagNameIn(List<String> tagNames);
 	
-	//Set<Tag> findBytagNameIn(List<String> tagNames);
-	
+	// name must not be duplicated
+	Set<Tag> findBytagNameInOrderByTagName(List<String> tagNames);
 	
  
 }

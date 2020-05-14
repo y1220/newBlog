@@ -11,7 +11,6 @@ import java.util.stream.Collectors;
 import javax.servlet.http.HttpServletRequest;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -28,13 +27,14 @@ import org.springframework.web.bind.annotation.RestController;
 import it.course.myblog.entity.Blacklist;
 import it.course.myblog.entity.BlacklistReason;
 import it.course.myblog.entity.Comment;
-import it.course.myblog.entity.Credit;
 import it.course.myblog.entity.Post;
 import it.course.myblog.entity.Role;
 import it.course.myblog.entity.RoleName;
+import it.course.myblog.entity.Tag;
 import it.course.myblog.entity.Users;
 import it.course.myblog.payload.UserProfile;
 import it.course.myblog.payload.request.ChangeRoleRequest;
+import it.course.myblog.payload.request.TagsRequest;
 import it.course.myblog.payload.response.ApiResponseCustom;
 import it.course.myblog.payload.response.BannedUserProfile;
 import it.course.myblog.payload.response.BlacklistResponse;
@@ -45,9 +45,11 @@ import it.course.myblog.repository.CommentRepository;
 import it.course.myblog.repository.CreditRepository;
 import it.course.myblog.repository.PostRepository;
 import it.course.myblog.repository.RoleRepository;
+import it.course.myblog.repository.TagRepository;
 import it.course.myblog.repository.UserRepository;
 import it.course.myblog.security.UserPrincipal;
-import it.course.myblog.service.CountCreditsByUser;
+//import it.course.myblog.service.CountCreditsByUser;
+import it.course.myblog.service.UserService;
 
 
 @RestController
@@ -76,7 +78,49 @@ public class UserController {
 	CreditRepository creditRepository;
 	
 	@Autowired
-	CountCreditsByUser countCreditsByUser;
+	TagRepository tagRepository;
+
+	// @Autowired
+	// CountCreditsByUser countCreditsByUser;
+
+	@PostMapping("/set-preferred-tags")
+	@PreAuthorize("hasRole('READER')")
+	public ResponseEntity<ApiResponseCustom> setPreferredTags(@RequestBody TagsRequest tagsRequest,
+			HttpServletRequest request) {
+
+		UserPrincipal userPrincipal = UserService.getAuthenticatedUser();
+		Users user = userRepository.findById(userPrincipal.getId()).get();
+
+		Set<Tag> tags = tagRepository.findBytagNameInOrderByTagName(tagsRequest.getTagsToSearch());
+
+		// if tags.isEmpty() all preferred argument will be removed
+		user.setPreferredTags(tags);
+
+		userRepository.save(user);
+
+		return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom(Instant.now(), 200, null,
+				"Preferred tags succesfully updated for the user " + user.getUsername(), request.getRequestURI()),
+				HttpStatus.OK);
+	}
+
+	@GetMapping("/get-preferred-tags")
+	@PreAuthorize("hasRole('READER')")
+	public ResponseEntity<ApiResponseCustom> getPreferredTags(HttpServletRequest request) {
+
+		UserPrincipal userPrincipal = UserService.getAuthenticatedUser();
+		Users user = userRepository.findById(userPrincipal.getId()).get();
+
+		Set<Tag> tags = user.getPreferredTags();
+
+		if (tags.isEmpty())
+			return new ResponseEntity<ApiResponseCustom>(
+					new ApiResponseCustom(Instant.now(), 404, null,
+							"User " + user.getUsername() + " has not preferred tags", request.getRequestURI()),
+					HttpStatus.NOT_FOUND);
+		else
+			return new ResponseEntity<ApiResponseCustom>(
+					new ApiResponseCustom(Instant.now(), 200, null, tags, request.getRequestURI()), HttpStatus.OK);
+	}
 	
 	
 	@PostMapping("change-role")
@@ -204,7 +248,8 @@ public class UserController {
 		List<Post> ps = postRepository.findByIsVisibleTrueAndCreatedBy(userId);
 		List<Comment> cs = commentRepository.findByIsVisibleTrueAndCreatedBy(userId);
 		
-		int TotalCredits = countCreditsByUser.countCredits(ps, cs, u.get());
+		// int TotalCredits = countCreditsByUser.countCredits(ps, cs, u.get());
+		int TotalCredits = u.get().getCredit();
 		
  		CreditsByUser cbu = new CreditsByUser(userId, u.get().getUsername(), TotalCredits, ps, cs);
 		

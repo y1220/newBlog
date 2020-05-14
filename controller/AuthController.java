@@ -17,6 +17,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -48,6 +49,7 @@ import it.course.myblog.payload.response.JwtAuthenticationResponse;
 import it.course.myblog.repository.BlacklistReasonRepository;
 import it.course.myblog.repository.BlacklistRepository;
 import it.course.myblog.repository.CommentRepository;
+import it.course.myblog.repository.LoginAttemptsRepository;
 import it.course.myblog.repository.PostRepository;
 import it.course.myblog.repository.RoleRepository;
 import it.course.myblog.repository.UserRepository;
@@ -55,6 +57,7 @@ import it.course.myblog.security.JwtTokenProvider;
 import it.course.myblog.security.UserPrincipal;
 import it.course.myblog.service.CtrlUserBan;
 import it.course.myblog.service.MailService;
+import it.course.myblog.service.PostService;
 import it.course.myblog.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 
@@ -100,49 +103,59 @@ public class AuthController {
 	@Autowired
 	MailService mailService;
 	
+	@Autowired
+	LoginAttemptsRepository loginAttemptsRepository;
+
+	@Autowired
+	PostService postService;
+
+	@Autowired
+	UserService userService;
+
 	@PostMapping("/signin")
 	@ApiOperation(value="User login", response = ResponseEntity.class)
 	@ApiResponses(value= {
 			@ApiResponse(code=200, message="User logged in"),
-			@ApiResponse(code=401, message="Bad credentials or User Banned"),
+			@ApiResponse(code = 401, message = "Bad credentials or User Banned or Registration not confirmed"),
 			@ApiResponse(code=404, message="User not found")
 	})
 	public ResponseEntity<?> authenticatUser(
 			@ApiParam(value="LoginRequest Object", required=true) @Valid @RequestBody LoginRequest loginRequest,
 			HttpServletRequest request){
 
-		// login attempt
-			
 		log.info("Call controller authenticatUser with parameter usernameOrEmail {}", loginRequest.getUsernameOrEmail() );
-		
-		Optional<Users> u = userRepository.findByUsernameOrEmail(loginRequest.getUsernameOrEmail(), loginRequest.getUsernameOrEmail());
-		
-		if(!u.isPresent()) {
-			log.error("User {} not found", loginRequest.getUsernameOrEmail());
-			return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 401, "Unauthorized", "Bad credentials", request.getRequestURI()), HttpStatus.FORBIDDEN);
-		}
-		
-		if(u.get().getRoles().size() < 1) {
+		Optional<Users> u = userRepository.findByUsernameOrEmail(loginRequest.getUsernameOrEmail(),
+				loginRequest.getUsernameOrEmail());
+		/*
+		 * if(!u.isPresent()){ log.error("User {} not found",
+		 * loginRequest.getUsernameOrEmail()); return new
+		 * ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 401,
+		 * "Unauthorized", "Bad credentials_", request.getRequestURI()),
+		 * HttpStatus.FORBIDDEN); }
+		 */
+		if (u.isPresent() && u.get().getRoles().size() < 1) {
 			log.error("User {} not confirmed", loginRequest.getUsernameOrEmail());
 			return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 401, "Unauthorized", "User not confirmed. Please check your email.", request.getRequestURI()), HttpStatus.FORBIDDEN);
 		}
 		
-		if(ctrlUserBan.isBanned(u.get()).isPresent()) {
+		if (u.isPresent() && ctrlUserBan.isBanned(u.get()).isPresent()) {
 			log.info("User {} unauthorized to log in. Reason: banned!", loginRequest.getUsernameOrEmail());
 			return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 401, "Unauthorized", "User Banned Until "+ctrlUserBan.isBanned(u.get()).get().getBlacklistedUntil(), request.getRequestURI()), HttpStatus.FORBIDDEN);
 		}
-		Authentication authentication = authenticationManager.authenticate(
-			new UsernamePasswordAuthenticationToken(
-				u.get().getUsername(), loginRequest.getPassword()		
-			)
-		);
+		
+		Authentication authentication = null;
+		try {
+			authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(
+					u.isPresent() ? u.get().getUsername() : " ", loginRequest.getPassword()));
+		} catch (BadCredentialsException e) {
+			return userService.traceAttempts(u, request);
+		}
+
 		
 		SecurityContextHolder.getContext().setAuthentication(authentication);
 		
 		String jwt = tokenProvider.generateToken(authentication);
 		log.info("User {} succesfully logged", loginRequest.getUsernameOrEmail());
-
-		// login attempt reset
 
 		return ResponseEntity.ok(new JwtAuthenticationResponse(jwt));
 		
@@ -325,9 +338,7 @@ public class AuthController {
 		}		
 		
 		log.info("Email has been sent to {}", usernameOrEmail);
-		//  http://localhost:8081/api/auth/change-password/406EF88212FBCD982DF8D3F9AF3A05AF609348C0ABF1BB77CE227127BDED3D55
 		
-	//  http://192.168.10.189:8081/api/auth/change-password/406EF88212FBCD982DF8D3F9AF3A05AF609348C0ABF1BB77CE227127BDED3D55
 		return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom(Instant.now(), 200, null, "Email has been sent to: "+usernameOrEmail, request.getRequestURI()), HttpStatus.OK );
 		
 	}
