@@ -1,0 +1,23 @@
+<prevent the problems from hacker>
+◎case 1  (user exist)
+	1. Find the targeted user
+	2. Check the ip address
+	3. Check the existence of targeted user's record
+	4. Check hacker's ip is same or not
+	-> same : take a record from database   
+	-> differs: make a new record  
+	5. Count the number of attempt and do plus one
+	6. In case the attempt number arrives at 3 times, block the user(the combination of user and ip even if he/ she login with correct password, print error)
+
+
+◎case 2  (user doesn't exist)
+	1. Check the ip address
+	2. Check the existence of record done by same ip
+	-> found        : take a record from database   
+	-> not found : make a new record  
+	3. Count the number of attempt and do plus one
+	4. In case the attempt number arrives at 3 times, block all the login opperation from ip even if he/ she login with correct password, print error)
+
+
+
+
