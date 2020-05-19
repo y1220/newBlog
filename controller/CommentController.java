@@ -12,7 +12,6 @@ import javax.servlet.http.HttpServletRequest;
 import javax.transaction.Transactional;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.support.BeanDefinitionDsl.Role;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -26,8 +25,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import io.swagger.annotations.ApiOperation;
 import it.course.myblog.entity.Comment;
-import it.course.myblog.entity.Credit;
 import it.course.myblog.entity.Post;
 import it.course.myblog.entity.RoleName;
 import it.course.myblog.entity.Users;
@@ -92,6 +91,7 @@ public class CommentController {
 		Comment c = new Comment();	
 		c.setReview(commentRequest.getReview());
 		c.setPost(p.get());
+		c.setCredit(creditRepository.findByEndDateIsNullAndCreditCodeStartingWith("C").get());
 		
 		commentRepository.save(c);
 		
@@ -114,13 +114,12 @@ public class CommentController {
 			
 		c.get().setVisible(true);
 		
-		Optional<Credit> credit = creditRepository.findByEndDateIsNullAndCreditCodeStartingWith("C");
 		Optional<Users> u = userRepository.findById(c.get().getCreatedBy());
 		
 		// CREDITS ASSIGNED ONLY IF THE USER ROLE IS 'ROLE_READER'
 		if( u.get().getRoles().stream().filter(r -> r.getName().equals(RoleName.ROLE_READER)).count() > 0) {
 		
-			u.get().setCredit(u.get().getCredit() + credit.get().getCreditImport());
+			u.get().setCredit(u.get().getCredit() + c.get().getCredit().getCreditImport());
 			userRepository.save(u.get());
 			
 		}
@@ -145,13 +144,12 @@ public class CommentController {
 			
 		c.get().setVisible(false);
 		
-		Optional<Credit> credit = creditRepository.findByEndDateIsNullAndCreditCodeStartingWith("C");
 		Optional<Users> u = userRepository.findById(c.get().getCreatedBy());
 		
 		// CREDITS SUBTRACTED ONLY IF THE USER ROLE IS 'ROLE_READER'
 		if( u.get().getRoles().stream().filter(r -> r.getName().equals(RoleName.ROLE_READER)).count() > 0) {
 		
-			u.get().setCredit(u.get().getCredit() - credit.get().getCreditImport());
+			u.get().setCredit(u.get().getCredit() - c.get().getCredit().getCreditImport());
 			userRepository.save(u.get());
 			
 		}
@@ -192,6 +190,7 @@ public class CommentController {
 	
 	@GetMapping("/count-comments-group-by-post")
 	@PreAuthorize("hasRole('ADMIN')")
+	@ApiOperation(value="Count comments group by post", response = ResponseEntity.class)
 	public ResponseEntity<ApiResponseCustom> countCommentsGroupByPost(HttpServletRequest request){
 		
 		// FIND ALL PUBLISHED POSTS
@@ -227,12 +226,10 @@ public class CommentController {
 		List<Comment> cs = commentRepository.findByIdIn(ids);
 		List<Users> us = new ArrayList<Users>();
 		
-		Optional<Credit> credit = creditRepository.findByEndDateIsNullAndCreditCodeStartingWith("C");
-		
 		for(Comment comment : cs) {
 			Users u = userRepository.findById(comment.getCreatedBy()).get();
 			if( u.getRoles().stream().filter(r -> r.getName().equals(RoleName.ROLE_READER)).count() > 0) {
-				u.setCredit(u.getCredit() + credit.get().getCreditImport());
+				u.setCredit(u.getCredit() + comment.getCredit().getCreditImport());
 				us.add(u);
 			}
 		}
@@ -253,12 +250,10 @@ public class CommentController {
 		List<Comment> cs = commentRepository.findByIdIn(ids);
 		List<Users> us = new ArrayList<Users>();
 		
-		Optional<Credit> credit = creditRepository.findByEndDateIsNullAndCreditCodeStartingWith("C");
-		
 		for(Comment comment : cs) {
 			Users u = userRepository.findById(comment.getCreatedBy()).get();
 			if( u.getRoles().stream().filter(r -> r.getName().equals(RoleName.ROLE_READER)).count() > 0) {
-				u.setCredit(u.getCredit() - credit.get().getCreditImport());
+				u.setCredit(u.getCredit() - comment.getCredit().getCreditImport());
 				us.add(u);
 			}
 		}

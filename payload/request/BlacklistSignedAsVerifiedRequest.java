@@ -15,7 +15,6 @@ public class BlacklistSignedAsVerifiedRequest {
 	@NotNull
 	private Long blacklistReasonId;
 	
-	
 	private boolean toBan;
 	
 	

@@ -16,6 +16,7 @@ public class LoginRequest {
 	
 	@NotBlank(message = "Username or Email must not be blank")
 	@ApiModelProperty(notes = "Insert username or email")
+	@Size(min=3, max=120)
 	private String usernameOrEmail;
 	
 	@NotBlank(message = "Password must not be blank")

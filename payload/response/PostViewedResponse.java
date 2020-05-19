@@ -2,7 +2,6 @@ package it.course.myblog.payload.response;
 
 import java.time.Instant;
 
-
 import it.course.myblog.entity.PostViewed;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -14,7 +13,9 @@ public class PostViewedResponse {
 	private Long id;
 	private Long postId;
 	private String postTitle;
+	
 	private Instant viewedStart;
+	
 	private Instant viewedEnd;
 	private String ip;
 	private String username;

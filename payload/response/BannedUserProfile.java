@@ -1,7 +1,6 @@
 package it.course.myblog.payload.response;
 
 import java.time.LocalDate;
-import java.util.Date;
 import java.util.List;
 
 import it.course.myblog.entity.Blacklist;
@@ -21,7 +20,6 @@ public class BannedUserProfile {
 	private String reason;
 	private List<BlacklistResponse> blacklists;
 	private int countBlacklist;
-	
 	
 	
 	public static BannedUserProfile create(Users user, Blacklist blacklist, 

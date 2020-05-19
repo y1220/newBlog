@@ -4,6 +4,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -118,29 +119,27 @@ public class FileController {
 
 	@GetMapping("/excel-report")
 	@PreAuthorize("hasRole('ADMIN')")
-	public ResponseEntity<?> downloadExcel(HttpServletRequest request) {
-
+	public ResponseEntity<?> downloadExcel(HttpServletRequest request){
+		
 		try {
 			InputStream excelFile = fileService.createExcel();
-
+			
 			HttpHeaders headers = new HttpHeaders();
-			headers.set("Content-Type", "application/vnd.ms-excel;");
-			headers.set("content-length", Integer.toString(excelFile.available()));
-			headers.set("Content-Disposition", "attachment; filename=Report.xls");
+		    headers.set("Content-Type", "application/vnd.ms-excel;");
+		    headers.set("content-length",Integer.toString(excelFile.available()));
+		    headers.set("Content-Disposition", "attachment; filename=Report.xls");
 
 			log.info("Succesfully generated Excel document");
 			return new ResponseEntity<InputStreamResource>(new InputStreamResource(excelFile), headers, HttpStatus.OK);
 		} catch (FileNotFoundException e) {
 			log.error(e.getMessage());
 			return new ResponseEntity<ApiResponseCustom>(
-					new ApiResponseCustom(Instant.now(), 503, null,
-							"Something went wrong during the generation of the PDF", request.getRequestURI()),
+					new ApiResponseCustom(Instant.now(), 503, null, "Something went wrong during the generation of the PDF", request.getRequestURI()),
 					HttpStatus.SERVICE_UNAVAILABLE);
 		} catch (IOException e) {
 			log.error(e.getMessage());
 			return new ResponseEntity<ApiResponseCustom>(
-					new ApiResponseCustom(Instant.now(), 503, null,
-							"Something went wrong during the generation of the PDF", request.getRequestURI()),
+					new ApiResponseCustom(Instant.now(), 503, null, "Something went wrong during the generation of the PDF", request.getRequestURI()),
 					HttpStatus.SERVICE_UNAVAILABLE);
 		}
 	}

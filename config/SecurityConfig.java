@@ -11,9 +11,11 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 import it.course.myblog.security.CustomUserDetailsService;
@@ -61,8 +63,16 @@ public class SecurityConfig  extends WebSecurityConfigurerAdapter {
 		return super.authenticationManagerBean();
 		
 	}
-	
-	
+	/*
+	@Bean
+	public SecurityWebFilterChain securityWebFilterChain(
+	  ServerHttpSecurity http) {
+	    return http.authorizeExchange()
+	      .pathMatchers("/actuator/**").permitAll()
+	      .anyExchange().authenticated()
+	      .and().build();
+	}
+	*/
 	@Override
 	protected void configure(HttpSecurity http) throws Exception {
 		/*
@@ -100,7 +110,9 @@ public class SecurityConfig  extends WebSecurityConfigurerAdapter {
 				"/posts/get-posts-by-tags/**",
 				"/posts/search",
 				"/postviewed/set-post-viewer-end/**",
-				"/posts/view-all-published-posts-paged/**").permitAll()		
+				"/posts/view-single-post-with-image/**",
+				"/posts/view-all-published-posts-paged/**", "/actuator/**", "/custom-path/**")
+			.permitAll()		
 		.antMatchers("/v2/api-docs", 
 				"/configuration/ui", 
 				"/swagger-resources", 

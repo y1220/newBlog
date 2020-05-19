@@ -2,8 +2,11 @@ package it.course.myblog.controller;
 
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Collections;
+import java.util.Date;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import javax.mail.MessagingException;
 import javax.mail.internet.AddressException;
@@ -12,31 +15,41 @@ import javax.transaction.Transactional;
 import javax.validation.Valid;
 import javax.validation.constraints.Size;
 
+
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import io.micrometer.core.annotation.Timed;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
 import io.swagger.annotations.ApiResponse;
 import io.swagger.annotations.ApiResponses;
+import it.course.myblog.config.SecurityConfig;
 import it.course.myblog.entity.Blacklist;
 import it.course.myblog.entity.BlacklistReason;
 import it.course.myblog.entity.Comment;
+import it.course.myblog.entity.LoginAttempts;
 import it.course.myblog.entity.Post;
 import it.course.myblog.entity.Role;
 import it.course.myblog.entity.RoleName;
@@ -105,58 +118,59 @@ public class AuthController {
 	
 	@Autowired
 	LoginAttemptsRepository loginAttemptsRepository;
-
+	
 	@Autowired
 	PostService postService;
-
+	
 	@Autowired
 	UserService userService;
-
+	
 	@PostMapping("/signin")
 	@ApiOperation(value="User login", response = ResponseEntity.class)
 	@ApiResponses(value= {
 			@ApiResponse(code=200, message="User logged in"),
-			@ApiResponse(code = 401, message = "Bad credentials or User Banned or Registration not confirmed"),
+			@ApiResponse(code=401, message="Bad credentials or User Banned or Registration not confirmed"),
 			@ApiResponse(code=404, message="User not found")
 	})
 	public ResponseEntity<?> authenticatUser(
 			@ApiParam(value="LoginRequest Object", required=true) @Valid @RequestBody LoginRequest loginRequest,
 			HttpServletRequest request){
-
+		
 		log.info("Call controller authenticatUser with parameter usernameOrEmail {}", loginRequest.getUsernameOrEmail() );
-		Optional<Users> u = userRepository.findByUsernameOrEmail(loginRequest.getUsernameOrEmail(),
-				loginRequest.getUsernameOrEmail());
+		Optional<Users> u = userRepository.findByUsernameOrEmail(loginRequest.getUsernameOrEmail(),loginRequest.getUsernameOrEmail());
 		/*
-		 * if(!u.isPresent()){ log.error("User {} not found",
-		 * loginRequest.getUsernameOrEmail()); return new
-		 * ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 401,
-		 * "Unauthorized", "Bad credentials_", request.getRequestURI()),
-		 * HttpStatus.FORBIDDEN); }
-		 */
-		if (u.isPresent() && u.get().getRoles().size() < 1) {
+		if(!u.isPresent()){
+			log.error("User {} not found", loginRequest.getUsernameOrEmail());
+			return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 401, "Unauthorized", "Bad credentials_", request.getRequestURI()), HttpStatus.FORBIDDEN);
+		}
+		*/
+		if(u.isPresent() && u.get().getRoles().size() < 1) {
 			log.error("User {} not confirmed", loginRequest.getUsernameOrEmail());
 			return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 401, "Unauthorized", "User not confirmed. Please check your email.", request.getRequestURI()), HttpStatus.FORBIDDEN);
 		}
 		
-		if (u.isPresent() && ctrlUserBan.isBanned(u.get()).isPresent()) {
+		if(u.isPresent() && ctrlUserBan.isBanned(u.get()).isPresent()) {
 			log.info("User {} unauthorized to log in. Reason: banned!", loginRequest.getUsernameOrEmail());
 			return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 401, "Unauthorized", "User Banned Until "+ctrlUserBan.isBanned(u.get()).get().getBlacklistedUntil(), request.getRequestURI()), HttpStatus.FORBIDDEN);
 		}
 		
 		Authentication authentication = null;
 		try {
-			authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(
-					u.isPresent() ? u.get().getUsername() : " ", loginRequest.getPassword()));
-		} catch (BadCredentialsException e) {
-			return userService.traceAttempts(u, request);
+			authentication = authenticationManager.authenticate(
+				new UsernamePasswordAuthenticationToken(
+					u.isPresent() ? u.get().getUsername() : " ", loginRequest.getPassword()		
+				)
+			);
+		}catch(BadCredentialsException e) {
+			return userService.traceAttempts(u, request);		
 		}
-
+			
 		
 		SecurityContextHolder.getContext().setAuthentication(authentication);
 		
 		String jwt = tokenProvider.generateToken(authentication);
 		log.info("User {} succesfully logged", loginRequest.getUsernameOrEmail());
-
+		
 		return ResponseEntity.ok(new JwtAuthenticationResponse(jwt));
 		
 	}

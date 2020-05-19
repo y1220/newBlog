@@ -1,11 +1,14 @@
 package it.course.myblog.service;
 
 import java.math.BigInteger;
+
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Optional;
 
 import javax.servlet.http.HttpServletRequest;
@@ -30,52 +33,52 @@ public class UserService {
 	
 	@Autowired
 	UserRepository userRepository;
-
+	
 	@Autowired
 	LoginAttemptsRepository loginAttemptsRepository;
-
+	
 	@Value("${app.login.time.to.unlock}")
 	private int timeToUnlock;
-
+	
 	@Value("${app.login.max.attempt}")
 	private int maxAttempts;
+	
 	
 	public ResponseEntity<?> traceAttempts(Optional<Users> u, HttpServletRequest request) {
 		String ip = PostService.findIp(request);
 		Optional<LoginAttempts> la = Optional.of(new LoginAttempts());
-		if (u.isPresent()) {
+		if(u.isPresent()){
 			la = loginAttemptsRepository.findTop1ByUserIdOrderByUpdatedAtDesc(u.get().getId());
-		} else {
-			la = loginAttemptsRepository.findByIp(ip);
+		}else {
+			la= loginAttemptsRepository.findByIp(ip);
 		}
 		Instant dateLock = Instant.now().minus(timeToUnlock, ChronoUnit.SECONDS);
-
-		if (la.isPresent() && la.get().getAttempts() < maxAttempts) {
-			la.get().setAttempts(la.get().getAttempts() + 1);
+		
+		if(la.isPresent() && la.get().getAttempts() < maxAttempts) {
+			la.get().setAttempts(la.get().getAttempts()+1);
 			la.get().setIp(ip);
 			loginAttemptsRepository.save(la.get());
-		} else if (la.isPresent() && la.get().getAttempts() == maxAttempts) {
-			if (la.get().getUpdatedAt().isAfter(dateLock)) {
+		} else if(la.isPresent() && la.get().getAttempts() == maxAttempts) {
+			if(la.get().getUpdatedAt().isAfter(dateLock)) {
 				la.get().setIp(ip);
 				la.get().setUpdatedAt(Instant.now());
 				loginAttemptsRepository.save(la.get());
-				return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom(Instant.now(), 401, "Unauthorized",
-						"User locked", request.getRequestURI()), HttpStatus.FORBIDDEN);
-			} else {
+				return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 401, "Unauthorized", "User locked", request.getRequestURI()), HttpStatus.FORBIDDEN);
+			}else {
 				la.get().setIp(ip);
 				la.get().setAttempts(1);
 				la.get().setUpdatedAt(Instant.now());
 				loginAttemptsRepository.save(la.get());
 			}
-		} else {
+		}else {
 			LoginAttempts l = new LoginAttempts(ip, 1, u.get().getId());
 			loginAttemptsRepository.save(l);
-		}
-
-		return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom(Instant.now(), 401, "Unauthorized",
-				"Bad credentials Service", request.getRequestURI()), HttpStatus.FORBIDDEN);
+		}	
+		
+		return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 401, "Unauthorized", "Bad credentials Service", request.getRequestURI()), HttpStatus.FORBIDDEN);
 	}
-
+	
+	
 	public static UserPrincipal getAuthenticatedUser() {
 		
 		// RECOVER FROM SECURITY CONTEXT THE USER LOGGED IN
@@ -86,10 +89,10 @@ public class UserService {
 		return null;
 		
 	}
-
+	
 	public boolean isAuthenticated() {
 		Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-		if (!authentication.getPrincipal().toString().equals("anonymousUser"))
+		if(!authentication.getPrincipal().toString().equals("anonymousUser"))
 			return true;
 		return false;
 	}

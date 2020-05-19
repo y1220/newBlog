@@ -20,34 +20,52 @@ public interface UserRepository extends JpaRepository<Users, Long>{
 	Optional<Users> findById(Long id);
 	Optional<Users> findByIdentifierCode(String identifier);
 	Optional<Users> findByUsernameOrEmail(String username, String email);
+	//Optional<Users> findByUsernameOrEmailAndPassword(String username, String email, String password);
+	
+	@Query(value = "SELECT * FROM  users AS u WHERE password=?3 AND (username=?1 OR email=?2)", nativeQuery=true)
+	Optional<Users> findByUsernameOrEmailAndPassword(String username, String email, String password);
 	
 	List<Users> findByRoles(Role r);
-
+	
 	Boolean existsByUsername(String username);
 	Boolean existsByEmail(String email);
 	
 	List<Users> findByLastnameLike(String lastname);
 	List<Users> findUserByHasNewsletterTrue();
-
+	
 	Optional<Users> findByIdAndRolesIn(Long userId, Set<Role> roles);
-
+	
 	List<Users> findByRolesOrIdIn(Role role, List<Long> ids);
-
+	                  
 	long count();
 	
 	// Fabio
-	@Query(value = "SELECT *" + "	FROM  users AS u" + "	WHERE u.id IN (SELECT p.created_by"
-			+ "		FROM post AS p, users AS u" + "		WHERE u.id=p.created_by)" + "	OR u.id IN (SELECT u.id"
-			+ "		FROM users AS u,roles AS r,user_roles AS ur " + "		WHERE u.id=ur.user_id AND"
-			+ "		ur.role_id=r.id AND" + "		r.name='ROLE_EDITOR')", nativeQuery = true)
+	@Query(value = "SELECT *" + 
+			"	FROM  users AS u" + 
+			"	WHERE u.id IN (SELECT p.created_by" + 
+			"		FROM post AS p, users AS u" + 
+			"		WHERE u.id=p.created_by)" + 
+			"	OR u.id IN (SELECT u.id" + 
+			"		FROM users AS u,roles AS r,user_roles AS ur " + 
+			"		WHERE u.id=ur.user_id AND" + 
+			"		ur.role_id=r.id AND" + 
+			"		r.name='ROLE_EDITOR')",
+			nativeQuery=true)
 	List<Users> findByUsersWhoWrotePosts();
 	
-	@Query(value = "SELECT *" + " FROM  users AS u" + " WHERE u.id IN (SELECT c.created_by"
-			+ " 	FROM comment AS c, users AS u" + " 	WHERE u.id=c.created_by)" + " OR u.id IN (SELECT u.id"
-			+ " 	FROM users AS u,roles AS r, user_roles AS ur " + " 	WHERE u.id=ur.user_id AND"
-			+ "    ur.role_id=r.id AND" + "    r.name='ROLE_READER')", nativeQuery = true)
+	@Query(value = "SELECT *" + 
+			   " FROM  users AS u" + 
+			   " WHERE u.id IN (SELECT c.created_by" + 
+			   " 	FROM comment AS c, users AS u" + 
+			   " 	WHERE u.id=c.created_by)" + 
+			   " OR u.id IN (SELECT u.id" + 
+			   " 	FROM users AS u,roles AS r, user_roles AS ur " + 
+			   " 	WHERE u.id=ur.user_id AND" + 
+			   "    ur.role_id=r.id AND" + 
+			   "    r.name='ROLE_READER')",
+			   nativeQuery=true)
 	List<Users> findByUsersWhoWroteComments();
-
+			                
 
 
 	

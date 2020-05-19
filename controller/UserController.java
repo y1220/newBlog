@@ -9,6 +9,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import javax.servlet.http.HttpServletRequest;
+import javax.validation.Valid;
+import javax.validation.constraints.NotNull;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import it.course.myblog.entity.Blacklist;
@@ -79,47 +82,42 @@ public class UserController {
 	
 	@Autowired
 	TagRepository tagRepository;
-
-	// @Autowired
-	// CountCreditsByUser countCreditsByUser;
-
+	
+	//@Autowired
+	//CountCreditsByUser countCreditsByUser;
+	
 	@PostMapping("/set-preferred-tags")
 	@PreAuthorize("hasRole('READER')")
-	public ResponseEntity<ApiResponseCustom> setPreferredTags(@RequestBody TagsRequest tagsRequest,
-			HttpServletRequest request) {
-
+	public ResponseEntity<ApiResponseCustom> setPreferredTags(@RequestBody TagsRequest tagsRequest, HttpServletRequest request){
+		
 		UserPrincipal userPrincipal = UserService.getAuthenticatedUser();
 		Users user = userRepository.findById(userPrincipal.getId()).get();
-
+		
 		Set<Tag> tags = tagRepository.findBytagNameInOrderByTagName(tagsRequest.getTagsToSearch());
-
+		
 		// if tags.isEmpty() all preferred argument will be removed
 		user.setPreferredTags(tags);
-
-		userRepository.save(user);
-
-		return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom(Instant.now(), 200, null,
-				"Preferred tags succesfully updated for the user " + user.getUsername(), request.getRequestURI()),
-				HttpStatus.OK);
+		
+		userRepository.save(user);		
+		
+		return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 200, null, "Preferred tags succesfully updated for the user " + user.getUsername(), request.getRequestURI()), HttpStatus.OK);
 	}
-
+	
 	@GetMapping("/get-preferred-tags")
 	@PreAuthorize("hasRole('READER')")
-	public ResponseEntity<ApiResponseCustom> getPreferredTags(HttpServletRequest request) {
-
+	public ResponseEntity<ApiResponseCustom> getPreferredTags(HttpServletRequest request){
+		
 		UserPrincipal userPrincipal = UserService.getAuthenticatedUser();
 		Users user = userRepository.findById(userPrincipal.getId()).get();
-
+		
 		Set<Tag> tags = user.getPreferredTags();
-
-		if (tags.isEmpty())
+		
+		if(tags.isEmpty())
 			return new ResponseEntity<ApiResponseCustom>(
-					new ApiResponseCustom(Instant.now(), 404, null,
-							"User " + user.getUsername() + " has not preferred tags", request.getRequestURI()),
+					new ApiResponseCustom( Instant.now(), 404, null, "User " + user.getUsername() + " has not preferred tags", request.getRequestURI()),
 					HttpStatus.NOT_FOUND);
-		else
-			return new ResponseEntity<ApiResponseCustom>(
-					new ApiResponseCustom(Instant.now(), 200, null, tags, request.getRequestURI()), HttpStatus.OK);
+		else		
+			return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom( Instant.now(), 200, null, tags, request.getRequestURI()), HttpStatus.OK);
 	}
 	
 	
@@ -248,7 +246,7 @@ public class UserController {
 		List<Post> ps = postRepository.findByIsVisibleTrueAndCreatedBy(userId);
 		List<Comment> cs = commentRepository.findByIsVisibleTrueAndCreatedBy(userId);
 		
-		// int TotalCredits = countCreditsByUser.countCredits(ps, cs, u.get());
+		//int TotalCredits = countCreditsByUser.countCredits(ps, cs, u.get());
 		int TotalCredits = u.get().getCredit();
 		
  		CreditsByUser cbu = new CreditsByUser(userId, u.get().getUsername(), TotalCredits, ps, cs);

@@ -33,7 +33,7 @@ public interface RatingRepository extends JpaRepository<Rating, RatingUserPostCo
 	List<Rating> findByTwoMaxNumbersOfRates();
 	*/
 	
-	// JPQL (Just to have ideas of 2 ways)
+	// JPQL
 	@Query(value="SELECT r, COUNT(r) as countRate "
 			+ "FROM Rating r "
 			+ "INNER JOIN Post AS p ON p.id=r.ratingUserPostCompositeKey.postId.id "

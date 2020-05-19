@@ -16,9 +16,9 @@ public interface CreditRepository extends JpaRepository<Credit, Long>{
 	
 	Optional<Credit> findByCreditCode(String creditCode);
 	
-	Optional<Credit> findByEndDateIsNullAndCreditCodeStartingWith(String creditCode);
-	
 	List<Credit> findByEndDateIsNullOrderByCreditCodeAsc();
+	
+	Optional<Credit> findByEndDateIsNullAndCreditCodeStartingWith(String creditCodeStartsWith);
 	
 
 }

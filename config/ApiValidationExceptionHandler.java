@@ -1,5 +1,6 @@
 package it.course.myblog.config;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -15,6 +16,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 import it.course.myblog.exception.ApiErrorsView;
 import it.course.myblog.exception.ApiFieldError;
 import it.course.myblog.exception.ApiGlobalError;
+import it.course.myblog.payload.response.ApiResponseCustom;
 
 @ControllerAdvice
 public class ApiValidationExceptionHandler extends ResponseEntityExceptionHandler{
@@ -47,11 +49,12 @@ public class ApiValidationExceptionHandler extends ResponseEntityExceptionHandle
 		
 		ApiErrorsView apiErrorsView = new ApiErrorsView(apiFieldErrors, apiGlobalErrors);
 		
-		return new ResponseEntity<>(apiErrorsView, HttpStatus.UNPROCESSABLE_ENTITY);
-//		thomas code
-//		  return new ResponseEntity<Object>(new ApiResponse( Instant.now(), 422,
-//				    null, apiErrorsView, request.getDescription(false)), HttpStatus.UNPROCESSABLE_ENTITY);
-//		
+		//return new ResponseEntity<>(apiErrorsView, HttpStatus.UNPROCESSABLE_ENTITY);
+		 return new ResponseEntity<Object>(new ApiResponseCustom( Instant.now(), 422,
+				    null, apiErrorsView, request.getDescription(false)), HttpStatus.UNPROCESSABLE_ENTITY);
+		
+		//return new ResponseEntity<ApiResponse>(new ApiResponse(Instant.now(), 200, null, "Password has been modified", request.getRequestURI()), HttpStatus.OK );
+				
 	}
 
 }

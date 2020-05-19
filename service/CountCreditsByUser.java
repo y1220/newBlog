@@ -18,6 +18,7 @@ public class CountCreditsByUser {
 	@Autowired
 	CreditRepository creditRepository;
 	
+	// not used: replaced by column Credit in Users table
 	public int countCredits(List<Post> ps, List<Comment> cs, Users currentUser) {
 		
 		int TotalCredits = 0;
@@ -34,8 +35,8 @@ public class CountCreditsByUser {
 		}
 		
 		// DEBTS
-		Set<Post> postsBuyed = currentUser.getPosts();
-		for(Post p : postsBuyed) {
+		Set<Post> postsBought = currentUser.getPosts();
+		for(Post p : postsBought) {
 			Credit cr = creditRepository.findByCreditCode(p.getCredit().getCreditCode()).get();
 			TotalCredits = TotalCredits - (cr.getCreditImport());
 		}

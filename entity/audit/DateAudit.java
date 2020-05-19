@@ -20,12 +20,14 @@ import lombok.Setter;
 
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
-@JsonIgnoreProperties( //real time update
+@JsonIgnoreProperties(
 		value= {"createdAt","updatedAt"},
 		allowGetters = false
 		)
-//@Getter @Setter -> not sure so don't use notification
-public class DateAudit implements Serializable {
+@Getter @Setter
+public abstract class DateAudit implements Serializable{
+	
+	private static final long serialVersionUID = 1L;
 
 	@CreatedDate
 	@Temporal(TemporalType.DATE)
@@ -37,27 +39,4 @@ public class DateAudit implements Serializable {
 	@Column(name = "updated_at", nullable=false)
 	private Date updatedAt;
 
-//	public DateAudit(Date createdAt, Date updatedAt) {
-//		super();
-//		this.createdAt = createdAt;
-//		this.updatedAt = updatedAt;
-//	}
-
-	public Date getCreatedAt() {
-		return createdAt;
-	}
-
-	public void setCreatedAt(Date createdAt) {
-		this.createdAt = createdAt;
-	}
-
-	public Date getUpdatedAt() {
-		return updatedAt;
-	}
-
-	public void setUpdatedAt(Date updatedAt) {
-		this.updatedAt = updatedAt;
-	}
-	
-	
 }

@@ -1,7 +1,6 @@
 package it.course.myblog.service;
 
 
-
 import com.itextpdf.text.Document;
 import com.itextpdf.text.DocumentException;
 import com.itextpdf.text.Element;
@@ -49,28 +48,30 @@ public class HeaderFooterPageEvent extends PdfPageEventHelper {
 
 
 	private void addFooter(PdfWriter writer, Document document) throws DocumentException {
-		PdfPTable footer = new PdfPTable(new float[] { 95, 5 });
-
+		PdfPTable footer = new PdfPTable(new float[] {95, 5});
+	
 		footer.setPaddingTop(20);
-
+		
 		// set defaults
-		// footer.setWidths(new int[] { 5, 2 });
+		//footer.setWidths(new int[] { 5, 2 });
 		footer.setTotalWidth(document.getPageSize().getWidth() - 75);
-		// footer.setLockedWidth(true);
+		//footer.setLockedWidth(true);
 		footer.getDefaultCell().setFixedHeight(40);
-		// footer.getDefaultCell().setBorder(Rectangle.TOP);
-		// footer.getDefaultCell().setBorderColor(BaseColor.LIGHT_GRAY);
+		//footer.getDefaultCell().setBorder(Rectangle.TOP);
+		//footer.getDefaultCell().setBorderColor(BaseColor.LIGHT_GRAY);
 
 		// add current page count
 		footer.getDefaultCell().disableBorderSide(Rectangle.BOX);
 		footer.getDefaultCell().setHorizontalAlignment(Element.ALIGN_RIGHT);
-		footer.addCell(new Phrase(String.format("Page %d of", writer.getPageNumber()), FONT_FOOTER));
+		footer.addCell(
+				new Phrase(String.format("Page %d of", writer.getPageNumber()), FONT_FOOTER)
+				);
 
 		// add placeholder for total page count
 		PdfPCell totalPageCount = new PdfPCell(total);
 		totalPageCount.disableBorderSide(Rectangle.BOX);
-		// totalPageCount.setBorder(Rectangle.TOP);
-		// totalPageCount.setBorderColor(BaseColor.LIGHT_GRAY);
+		//totalPageCount.setBorder(Rectangle.TOP);
+		//totalPageCount.setBorderColor(BaseColor.LIGHT_GRAY);
 		totalPageCount.setPaddingTop(1);
 		footer.addCell(totalPageCount);
 

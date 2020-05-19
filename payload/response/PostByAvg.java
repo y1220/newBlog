@@ -8,18 +8,16 @@ import lombok.NoArgsConstructor;
 @Data @NoArgsConstructor @AllArgsConstructor
 public class PostByAvg {
  
- private Long postId;
- private String title;
- private String content;
- private Double avgRating;
+	private Long postId;
+	private String title;
+	private Double avgRating;
  
- public static PostByAvg create(Post post) {
-  return new PostByAvg(
-   post.getId(),
-   post.getTitle(),
-   post.getContent(),
-   post.getAvgRating()
-   );   
- }
+	public static PostByAvg create(Post post) {
+		return new PostByAvg(
+		   post.getId(),
+		   post.getTitle(),
+		   post.getAvgRating()
+		   );   
+	}
 
 }

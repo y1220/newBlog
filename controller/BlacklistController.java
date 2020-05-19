@@ -11,7 +11,6 @@ import javax.servlet.http.HttpServletRequest;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -29,7 +28,6 @@ import it.course.myblog.entity.Comment;
 import it.course.myblog.entity.Post;
 import it.course.myblog.entity.RoleName;
 import it.course.myblog.entity.Users;
-import it.course.myblog.exception.ResourceNotFoundException;
 import it.course.myblog.payload.request.BlacklistSignedAsVerifiedRequest;
 import it.course.myblog.payload.response.ApiResponseCustom;
 import it.course.myblog.payload.response.BlacklistResponse;

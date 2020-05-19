@@ -18,7 +18,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class JwtAuthenticationFilter extends OncePerRequestFilter {
+public class JwtAuthenticationFilter extends OncePerRequestFilter{
 	
 	@Autowired
 	JwtTokenProvider jwtTokenProvider;
@@ -41,11 +41,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 				
 				authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 				
-				// keep all user who does login
-				SecurityContextHolder.getContext().setAuthentication(authentication);
+				SecurityContextHolder.getContext().setAuthentication(authentication);				
 				
 			}
-		} catch(Exception e) {
+		} catch (Exception e) {
 			log.error("Unable to set user authentication in security context");
 		}
 		
@@ -60,5 +59,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 		}
 		return null;
 	}
-}
 	
+
+}

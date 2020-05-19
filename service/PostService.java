@@ -1,11 +1,10 @@
 package it.course.myblog.service;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.HashMap;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
-import java.util.Map;
+
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -21,7 +20,6 @@ import org.springframework.data.domain.Sort.Direction;
 import org.springframework.stereotype.Service;
 
 import it.course.myblog.entity.Post;
-import it.course.myblog.entity.Tag;
 import it.course.myblog.repository.PostPagedRepository;
 import it.course.myblog.repository.PostRepository;
 import it.course.myblog.repository.TagRepository;
@@ -104,10 +102,9 @@ public class PostService {
 	}
 	
 	public static double calcRelevance(double s, double t, double f) {
-		double k = (100/s) * ( f - 1 + (f/t));
 		
+		double k = (100/s) * ( f - 1 + (f/t));
 		k = Math.floor(k*100) / 100; // round to two decimal
-		//return (100/s) * ( f - 1 + (f/t)) ;
 		
 		return k;
 		
@@ -121,6 +118,13 @@ public class PostService {
 			% di rilevanza totale: R = B*F-C
 			100/S * (F-1+F/T)
 		*/
+	}
+	
+	public Date addHoursToJavaUtilDate(Date date, int hours) {
+	    Calendar calendar = Calendar.getInstance();
+	    calendar.setTime(date);
+	    calendar.add(Calendar.HOUR_OF_DAY, hours);
+	    return calendar.getTime();
 	}
 
 }

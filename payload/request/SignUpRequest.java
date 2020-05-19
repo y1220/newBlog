@@ -16,16 +16,26 @@ import lombok.Setter;
 @ApiModel(value="SignUpRequest object is used to user registration")
 public class SignUpRequest {
 	
-	@Pattern(regexp = "[A-Za-z]+[[\\s]*[A-Za-z]+]*", message = "please provide a name made by characters or numbers or space(mixed one is also fine)")
 	@ApiModelProperty(notes = "Insert name")
+	@Size(min=2, max=100)
+	//@Pattern(regexp = "[A-Za-z \\s]*", message = "Please provide a valid name")
+	//Yui works
+	//@Pattern(regexp = "[A-Za-z]+[\\s*[A-Za-z]*]*", message = "please provide a name made by characters or space(mixed one is also fine)")
+	//Simone
+	//@Pattern(regexp = "[^\\s*][A-Za-z \\s]*", message = "Please provide a valid name")
+	//Fabrizio
+	//@Pattern(regexp = "|(\\s*[A-Za-z]+[A-Za-z ' \\s]*)", message = "Please provide a valid name")
+	
 	private String name;
 	
 	@ApiModelProperty(notes = "Insert lastname")
+	@Size(min=2, max=100)
+	@Pattern(regexp = "[A-Za-z ' \\s]*", message = "Please provide a valid lastname")
 	private String lastname;
 	
 	@NotBlank
 	@Size(min=3, max=20)
-	@Pattern(regexp = "[A-Za-z0-9]+", message = "please provide a name made by characters or numbers(mixed one is also fine)")
+	@Pattern(regexp = "[A-Za-z0-9]+", message = "Please provide a valid usernaname")
 	@ApiModelProperty(notes = "Insert username")
 	private String username;
 	

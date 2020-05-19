@@ -1,6 +1,7 @@
 package it.course.myblog.repository;
 
 import java.time.LocalDate;
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,11 +26,8 @@ public interface BlacklistRepository extends JpaRepository<Blacklist, Long>{
 	List<Blacklist> findByIsVerifiedFalse();
 	
 	List<Blacklist> findByBlacklistedUntilBeforeOrBlacklistedUntilIsNotNull(LocalDate localdate);
-
 	List<Blacklist> findByCommentIdInAndBlacklistedUntilAfter(List<Long> ids, LocalDate now);
-
 	List<Blacklist> findByCommentIdIn(List<Long> ids);
-
 	List<Blacklist> findByPostIdInAndCommentId(List<Long> ids, Long zero);
 	
 	/** @Query -> nativeQuery **/

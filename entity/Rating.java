@@ -6,9 +6,12 @@ import javax.persistence.Column;
 import javax.persistence.EmbeddedId;
 import javax.persistence.Entity;
 import javax.persistence.Table;
-import javax.persistence.Transient;
 
 import org.hibernate.annotations.Check;
+
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.JsonIdentityReference;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -18,6 +21,8 @@ import lombok.NoArgsConstructor;
 @Table(name = "rating")
 @Check(constraints = "rating > 0 AND rating < 6")
 @Data @AllArgsConstructor @NoArgsConstructor
+@JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "RatingUserPostCompositeKey")
+@JsonIdentityReference(alwaysAsId = true)
 public class Rating implements Serializable {
 	
 
@@ -28,19 +33,11 @@ public class Rating implements Serializable {
 	
 	@EmbeddedId
 	private RatingUserPostCompositeKey ratingUserPostCompositeKey;
-	
+
 	public Rating(RatingUserPostCompositeKey ratingUserPostCompositeKey) {
 		super();
 		this.ratingUserPostCompositeKey = ratingUserPostCompositeKey;
 	}
 	
-	@Transient
-	private int countRate;
-
-	public Rating(int rating, RatingUserPostCompositeKey ratingUserPostCompositeKey) {
-		super();
-		this.rating = rating;
-		this.ratingUserPostCompositeKey = ratingUserPostCompositeKey;
-	}
 
 }

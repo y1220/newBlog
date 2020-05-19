@@ -10,19 +10,22 @@ import javax.persistence.Id;
 import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
 import javax.persistence.Table;
-import javax.persistence.Temporal;
-import javax.persistence.TemporalType;
 
 import it.course.myblog.entity.audit.ViewAudit;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "post_viewed")
 @Data @AllArgsConstructor @NoArgsConstructor
+@EqualsAndHashCode(callSuper=false)
 public class PostViewed extends ViewAudit{
 	
+
+	private static final long serialVersionUID = 1L;
+
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
@@ -35,8 +38,6 @@ public class PostViewed extends ViewAudit{
 	
 	@Column(name="viewed_end")
 	private Instant viewedEnd;
-	
-	
 	
 
 }

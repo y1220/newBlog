@@ -15,9 +15,7 @@ public class PostTagsResponse {
 	private String title;
 	private Set<Tag> tags;
 	private double relevance;
-	
-	
-	
+		
 	public static PostTagsResponse create(Post post) {
 		return new PostTagsResponse(
 			post.getId(),

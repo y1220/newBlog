@@ -1,10 +1,10 @@
 package it.course.myblog.controller;
 
+import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -12,11 +12,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import javax.imageio.ImageIO;
 import javax.servlet.http.HttpServletRequest;
 import javax.transaction.Transactional;
 
@@ -34,9 +34,12 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import it.course.myblog.entity.Comment;
+import it.course.myblog.entity.DBFile;
 import it.course.myblog.entity.Post;
 import it.course.myblog.entity.PostViewed;
 import it.course.myblog.entity.Rating;
@@ -52,10 +55,12 @@ import it.course.myblog.payload.response.CountPosts;
 import it.course.myblog.payload.response.CountRatings;
 import it.course.myblog.payload.response.PostByAvg;
 import it.course.myblog.payload.response.PostResponse;
+import it.course.myblog.payload.response.PostResponseWithImg;
 import it.course.myblog.payload.response.PostSearchResponse;
 import it.course.myblog.payload.response.PostTagsResponse;
 import it.course.myblog.repository.CommentRepository;
 import it.course.myblog.repository.CreditRepository;
+import it.course.myblog.repository.DBFileRepository;
 import it.course.myblog.repository.PostRepository;
 import it.course.myblog.repository.PostViewedRepository;
 import it.course.myblog.repository.RatingRepository;
@@ -63,6 +68,7 @@ import it.course.myblog.repository.RoleRepository;
 import it.course.myblog.repository.TagRepository;
 import it.course.myblog.repository.UserRepository;
 import it.course.myblog.security.UserPrincipal;
+import it.course.myblog.service.DBFileService;
 //import it.course.myblog.service.CountCreditsByUser;
 import it.course.myblog.service.PostService;
 import it.course.myblog.service.UserService;
@@ -104,6 +110,129 @@ public class PostController {
 	@Autowired
 	CreditRepository creditRepository;
 	
+	@Autowired
+	DBFileRepository dbFileRepository;
+	
+	@Autowired
+	DBFileService dbFileService;
+	
+	@PostMapping("/create-post-with-image")
+	@PreAuthorize("hasRole('EDITOR')")
+	@Transactional
+	public ResponseEntity<ApiResponseCustom> createPostWithImage(
+			@RequestPart("dbFile") MultipartFile dbFile,
+			@RequestParam String title,
+			@RequestParam String content,
+			@RequestParam String creditCode,
+			HttpServletRequest request) {
+		
+		DBFile file = dbFileService.fromMultiToDBFile(dbFile);
+		BufferedImage image = null;
+		try {
+			image = ImageIO.read(dbFile.getInputStream());
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+		if(image.getWidth() != 600 || image.getHeight() != 300 ) {
+			return new ResponseEntity<ApiResponseCustom>(
+					new ApiResponseCustom(Instant.now(), 401, null, "The image size must be 600x300", request.getRequestURI()),
+					HttpStatus.FORBIDDEN);
+		}
+		
+		dbFileRepository.save(file);
+		
+		Post p = new Post();
+		p.setTitle(title);
+		p.setContent(content);
+		p.setDbFile(file);
+		p.setCredit(creditRepository.findByCreditCode(creditCode).get());
+		
+		postRepository.save(p);
+
+		return new ResponseEntity<ApiResponseCustom>(
+				new ApiResponseCustom(Instant.now(), 200, null, "New post successfully created", request.getRequestURI()),
+				HttpStatus.OK);
+	}
+	
+	@GetMapping("/view-single-post-with-image/{id}")
+	public ResponseEntity<ApiResponseCustom> viewSinglePostWithImage(@PathVariable Long id, HttpServletRequest request) throws IOException {
+
+		Optional<Post> post = postRepository.findById(id);
+
+		if (!post.isPresent())
+			return new ResponseEntity<ApiResponseCustom>(
+					new ApiResponseCustom(Instant.now(), 404, null, "Post not found", request.getRequestURI()),
+					HttpStatus.NOT_FOUND);
+
+		if (!post.get().isVisible())
+			return new ResponseEntity<ApiResponseCustom>(
+					new ApiResponseCustom(Instant.now(), 403, null, "Post not visible", request.getRequestURI()),
+					HttpStatus.FORBIDDEN);
+		
+		if(post.get().getCredit().getCreditImport() > 0) {
+			UserPrincipal up = UserService.getAuthenticatedUser(); 
+			if(up != null) {
+				if(up.getAuthorities().stream().filter(g -> g.getAuthority().equals("ROLE_READER")).count() > 0 &&
+					up.getAuthorities().size() == 1) {
+				
+					Optional<Users> user = userRepository.findById(up.getId());
+					Set<Post> ownedPosts = user.get().getPosts();
+					
+					if(ownedPosts.stream().filter(p -> (p.getId() == post.get().getId())).count() == 0)
+						return new ResponseEntity<ApiResponseCustom>(
+								new ApiResponseCustom(Instant.now(), 403, null, "Post not owned", request.getRequestURI()),
+								HttpStatus.FORBIDDEN);
+				}
+			} else
+				return new ResponseEntity<ApiResponseCustom>(
+						new ApiResponseCustom(Instant.now(), 403, null, "You must be logged in to see this post", request.getRequestURI()),
+						HttpStatus.FORBIDDEN);
+		}
+		
+		List<Comment> comments = post.get().getComments().stream().filter(c -> c.isVisible()).collect(Collectors.toList());
+		
+		PostResponseWithImg postResponseWithImg = PostResponseWithImg.create(post.get());
+		postResponseWithImg.setComments(comments);
+			
+		PostViewed postViewed = new PostViewed();
+		postViewed.setPost(post.get());
+		postViewed.setIp(PostService.findIp(request));
+		postViewedRepository.save(postViewed);
+		
+		postResponseWithImg.setVisited(postViewed.getId());
+		
+		return new ResponseEntity<ApiResponseCustom>(
+				new ApiResponseCustom(Instant.now(), 200, null, postResponseWithImg, request.getRequestURI()),
+				HttpStatus.OK);
+	}
+	
+	@GetMapping("/gets-posts-by-preferred-tags")
+	@PreAuthorize("hasRole('READER')")
+	public ResponseEntity<ApiResponseCustom> getPostsByPreferredTags(HttpServletRequest request) {
+
+		UserPrincipal userPrincipal = UserService.getAuthenticatedUser();
+		Users user = userRepository.findById(userPrincipal.getId()).get();
+		
+		Set<Tag> tags = user.getPreferredTags();
+		if(tags.isEmpty())
+			return new ResponseEntity<ApiResponseCustom>(
+					new ApiResponseCustom(Instant.now(), 404, null, "User " + user.getUsername() + " has no preferred tags", request.getRequestURI()),
+					HttpStatus.NOT_FOUND);
+		
+		Set<Post> posts = postRepository.findByTagsInAndIsVisibleTrue(tags);
+		List<String> nameTags = tags.stream().map(t -> t.getTagName()).collect(Collectors.toList());
+		if(posts.isEmpty())
+			return new ResponseEntity<ApiResponseCustom>(
+					new ApiResponseCustom(Instant.now(), 404, null, "No posts found with tags " + nameTags.toString(), request.getRequestURI()),
+					HttpStatus.NOT_FOUND);
+		
+		Set<PostSearchResponse> psr = posts.stream().map(PostSearchResponse::create).collect(Collectors.toSet());
+		
+		return new ResponseEntity<ApiResponseCustom>(
+				new ApiResponseCustom(Instant.now(), 200, null, psr, request.getRequestURI()),
+				HttpStatus.OK);
+	}
 
 	@GetMapping("/view-two-posts-by-max-avg")
 	@PreAuthorize("hasRole('ADMIN') or hasRole('MANAGING_EDITOR')")
@@ -152,8 +281,10 @@ public class PostController {
 
 		List<Post> allPosts = postRepository.findAllByIsVisibleTrue(Sort.by(Sort.Direction.DESC, "updatedAt"));
 
+		List<PostResponseWithImg> prwi = allPosts.stream().map(PostResponseWithImg::create).collect(Collectors.toList());
+		
 		return new ResponseEntity<ApiResponseCustom>(
-				new ApiResponseCustom(Instant.now(), 200, null, allPosts, request.getRequestURI()), HttpStatus.OK);
+				new ApiResponseCustom(Instant.now(), 200, null, prwi, request.getRequestURI()), HttpStatus.OK);
 
 	}
 
@@ -180,18 +311,21 @@ public class PostController {
 			if(up != null) {
 				
 				// EXCEPT ROLE_READER, THE OTHER ROLES CAN VIEW THE POST
-				if(up.getAuthorities().stream().filter(g -> g.getAuthority().equals("ROLE_READER")).count() > 0) {
-				
-					Optional<Users> u = userRepository.findById(up.getId());
-					Set<Post> postBoughtList = u.get().getPosts();
+				if(up.getAuthorities().size() < 2) {
 					
-					// CONTROL IF LOGGED USER BOUGHT THE POST
-					if( postBoughtList.stream().filter(post -> (post.getId() == p.get().getId()) ).count() == 0) {
+					if(up.getAuthorities().stream().filter(g -> g.getAuthority().equals("ROLE_READER")).count() > 0) {
+					
+						Optional<Users> u = userRepository.findById(up.getId());
+						Set<Post> postBoughtList = u.get().getPosts();
 						
-						return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom(Instant.now(), 200, null, "You need to buy this post", request.getRequestURI()),
-								HttpStatus.FORBIDDEN);
-						
-					} 
+						// CONTROL IF LOGGED USER BOUGHT THE POST
+						if( postBoughtList.stream().filter(post -> (post.getId() == p.get().getId()) ).count() == 0) {
+							
+							return new ResponseEntity<ApiResponseCustom>(new ApiResponseCustom(Instant.now(), 200, null, "You need to buy this post", request.getRequestURI()),
+									HttpStatus.FORBIDDEN);
+							
+						} 
+					}
 				}
 			} else {
 				
@@ -269,12 +403,13 @@ public class PostController {
 
 	@PostMapping("/create-post")
 	@PreAuthorize("hasRole('EDITOR')")
-	public ResponseEntity<ApiResponseCustom> createPost(@RequestBody Post post, HttpServletRequest request) {
+	public ResponseEntity<ApiResponseCustom> createPost(@RequestBody Post post ,HttpServletRequest request) {
 
 		Post p = new Post();
 		p.setTitle(post.getTitle());
 		p.setContent(post.getContent());
 		p.setCredit(creditRepository.findByEndDateIsNullAndCreditCodeStartingWith("P").get());
+		
 		postRepository.save(p);
 
 		return new ResponseEntity<ApiResponseCustom>(
@@ -465,12 +600,11 @@ public class PostController {
 				if(!ids.contains(p.getId()) && p.isVisible())
 					ids.add(p.getId());
 					
-					if(tagsFound.containsKey(p.getId())) {
-						tagsFound.replace(p.getId(), tagsFound.get(p.getId())+1);
-					} else {
-						tagsFound.put(p.getId(), 1);
-					}
-					
+				if(tagsFound.containsKey(p.getId())) {
+					tagsFound.replace(p.getId(), tagsFound.get(p.getId())+1);
+				} else {
+					tagsFound.put(p.getId(), 1);
+				}
 			}
 			
 		}
@@ -563,8 +697,8 @@ public class PostController {
 					new ApiResponseCustom(Instant.now(), 404, null, "Post is not deluxe", request.getRequestURI()),
 					HttpStatus.NOT_FOUND);
 
-		List<Post> ps = postRepository.findByIsVisibleTrueAndCreatedBy(u.getId());
-		List<Comment> cs = commentRepository.findByIsVisibleTrueAndCreatedBy(u.getId());
+		//List<Post> ps = postRepository.findByIsVisibleTrueAndCreatedBy(u.getId());
+		//List<Comment> cs = commentRepository.findByIsVisibleTrueAndCreatedBy(u.getId());
 		
 		//int TotalCredits = countCreditsByUser.countCredits(ps, cs, u);
 		int TotalCredits = u.getCredit();
